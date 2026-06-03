@@ -79,7 +79,6 @@ class _SyncraAppState extends State<SyncraApp> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) return const MaterialApp(home: Scaffold(body: Center(child: CircularProgressIndicator())));
-
     return MaterialApp(
       title: 'Syncra',
       debugShowCheckedModeBanner: false,
@@ -107,7 +106,6 @@ class MainScreen extends StatefulWidget {
   final bool isDark;
   final Color seedColor;
   final Function(ThemeMode, Color, String) onSettingsChanged;
-
   const MainScreen({super.key, required this.currentLang, required this.isDark, required this.seedColor, required this.onSettingsChanged});
 
   @override
@@ -118,9 +116,8 @@ class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   late PageController _pageController; 
   SharedPreferences? prefs;
-  
   Map<String, double> tasasCambio = { 'USD': 1.0, 'BRL': 5.0, 'PEN': 3.7, 'EUR': 0.92, 'VES': 36.5, 'MXN': 17.5, 'JPY': 155.0 };
-
+  
   // Variables Presupuesto
   String monedaLocal = 'USD';
   String monedaRef = 'BRL';
@@ -130,7 +127,7 @@ class _MainScreenState extends State<MainScreen> {
   Map<String, double> gastos = {};
   double balanceLocal = 0.0;
   double balanceEq = 0.0;
-
+  
   // Variables Conversor
   TextEditingController convMontoCtrl = TextEditingController();
   String monedaDe = 'USD';
@@ -157,8 +154,8 @@ class _MainScreenState extends State<MainScreen> {
     const Color(0xFFF06292),
     const Color(0xFF90A4AE),
   ];
-
-    String t(String key) => i18n[widget.currentLang]?[key] ?? key;
+  
+  String t(String key) => i18n[widget.currentLang]?[key] ?? key;
 
   @override
   void initState() {
@@ -172,6 +169,13 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void dispose() {
     _pageController.dispose();
+    sueldoCtrl.dispose();
+    nombreGastoCtrl.dispose();
+    montoGastoCtrl.dispose();
+    convMontoCtrl.dispose();
+    precioEnvioCtrl.dispose();
+    pesoEnvioCtrl.dispose();
+    proxyCostoCtrl.dispose();
     super.dispose();
   }
 
@@ -255,7 +259,8 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  // --- MATEMÁTICAS ---
+
+    // --- MATEMÁTICAS ---
   void _calcularPresupuesto() {
     double sueldo = double.tryParse(sueldoCtrl.text) ?? 0.0;
     double totalGastos = gastos.values.fold(0.0, (sum, val) => sum + val);
@@ -288,7 +293,6 @@ class _MainScreenState extends State<MainScreen> {
     double proxyFeeUsd = costoProxyInput / (tasasCambio[monedaProxy] ?? 1.0);
     double costoEnvioUsd = 0.0;
     double impuestoUsd = 0.0;
-
     if (origenEnvio == 'Nacional') { costoEnvioUsd = 4.0 + (pesoKg * 2.5); }
     else if (origenEnvio == 'China') { costoEnvioUsd = 3.0 + (pesoKg * 15.0); }
     else if (origenEnvio == 'EE.UU.') { costoEnvioUsd = 12.0 + (pesoKg * 9.0); }
@@ -296,7 +300,6 @@ class _MainScreenState extends State<MainScreen> {
     else if (origenEnvio == 'Europa') { costoEnvioUsd = 14.0 + (pesoKg * 18.0); }
 
     double baseCif = precioUsd + costoEnvioUsd + proxyFeeUsd;
-    
     switch (destinoEnvio) {
       case 'Brasil': impuestoUsd = precioUsd <= 50.0 ? baseCif * 0.20 : baseCif * 0.92; break;
       case 'Perú': impuestoUsd = precioUsd <= 200.0 ? 0.0 : baseCif * 0.22; break;
@@ -397,7 +400,7 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ],
       ),
-      backgroundColor: Theme.of(context).colorScheme.background,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       body: SafeArea(
         child: PageView(
           controller: _pageController,
@@ -428,7 +431,7 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-    Widget _buildPresupuestoTab() {
+  Widget _buildPresupuestoTab() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -553,9 +556,8 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Widget _buildConversorTab() {
+    Widget _buildConversorTab() {
     double tasaEspecifica = (tasasCambio[monedaA] ?? 1.0) / (tasasCambio[monedaDe] ?? 1.0);
-    
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Card(
