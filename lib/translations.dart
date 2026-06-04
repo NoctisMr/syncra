@@ -1,0 +1,30 @@
+const Map<String, Map<String, String>> i18n = {
+  'es': {
+    'budget': 'Presupuesto', 'converter': 'Conversor', 'shipping': 'Envíos',
+    'local_curr': 'Moneda Local:', 'ref_curr': 'Moneda Ref:', 'base_salary': 'Sueldo Base Mensual',
+    'add_expense': 'AÑADIR GASTO', 'name': 'Nombre', 'amount': 'Monto',
+    'net_balance': 'BALANCE LIBRE', 'deficit': '(Déficit)', 'quick_conv': 'CONVERSOR RÁPIDO',
+    'amount_to_convert': 'Monto a cambiar', 'customs': 'ADUANAS Y ENVÍOS', 'price': 'Precio',
+    'weight': 'Peso (Kg)', 'origin': 'Origen del artículo', 'proxy_cost': 'Costo Intermediario',
+    'destination': 'Destino (Aduanas)', 'calc_prompt': 'Ingresa datos para calcular...',
+    'copied': 'Copiado al portapapeles', 'settings': 'Ajustes', 'dark_mode': 'Modo Oscuro',
+    'theme_color': 'Color del Tema', 'language': 'Idioma', 'value': 'Valor', 'freight': 'Flete',
+    'proxy': 'Proxy', 'tax': 'Aduana', 'current_rate': 'Tasa Actual:',
+    'cat_shopping': 'Compras', 'cat_services': 'Servicios', 'cat_subs': 'Suscripciones',
+    'cat_food': 'Comida', 'cat_others': 'Otros', 'available': 'Disponible',
+  },
+  'en': {
+    'budget': 'Budget', 'converter': 'Converter', 'shipping': 'Shipping',
+    'local_curr': 'Local Curr:', 'ref_curr': 'Ref Curr:', 'base_salary': 'Base Monthly Salary',
+    'add_expense': 'ADD EXPENSE', 'name': 'Name', 'amount': 'Amount',
+    'net_balance': 'FREE BALANCE', 'deficit': '(Deficit)', 'quick_conv': 'QUICK CONVERTER',
+    'amount_to_convert': 'Amount to convert', 'customs': 'CUSTOMS & SHIPPING', 'price': 'Price',
+    'weight': 'Weight (Kg)', 'origin': 'Item Origin', 'proxy_cost': 'Proxy Cost',
+    'destination': 'Destination (Customs)', 'calc_prompt': 'Enter data to calculate...',
+    'copied': 'Copied to clipboard', 'settings': 'Settings', 'dark_mode': 'Dark Mode',
+    'theme_color': 'Theme Color', 'language': 'Language', 'value': 'Value', 'freight': 'Freight',
+    'proxy': 'Proxy', 'tax': 'Tax', 'current_rate': 'Current Rate:',
+    'cat_shopping': 'Shopping', 'cat_services': 'Services', 'cat_subs': 'Subs',
+    'cat_food': 'Food', 'cat_others': 'Others', 'available': 'Available',
+  }
+};
