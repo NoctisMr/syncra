@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'dart:convert';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Hive.initFlutter();
+  await Hive.openBox('settingsBox');
+  await Hive.openBox('dataBox');
   runApp(const SyncraApp());
 }
 
@@ -16,7 +21,7 @@ const Map<String, Map<String, String>> i18n = {
     'add_expense': 'AÑADIR SUSCRIPCIÓN / GASTO', 'name': 'Nombre', 'amount': 'Monto',
     'net_balance': 'BALANCE NETO LIBRE', 'deficit': '(Déficit)', 'quick_conv': 'CONVERSOR RÁPIDO',
     'amount_to_convert': 'Monto a cambiar', 'customs': 'ADUANAS Y ENVÍOS', 'price': 'Precio',
-    'weight': 'Peso (Kg)', 'origin': 'Origen del artículo', 'proxy_cost': 'Costo Intermediario / Proxy',
+    'weight': 'Peso (Kg)', 'origin': 'Origen del artículo', 'proxy_cost': 'Costo Intermediario',
     'destination': 'Destino (Aduanas)', 'calc_prompt': 'Ingresa datos para calcular...',
     'copied': 'Copiado al portapapeles', 'settings': 'Ajustes', 'dark_mode': 'Modo Oscuro',
     'theme_color': 'Color del Tema', 'language': 'Idioma', 'value': 'Valor', 'freight': 'Flete',
@@ -28,7 +33,7 @@ const Map<String, Map<String, String>> i18n = {
     'add_expense': 'ADD SUBSCRIPTION / EXPENSE', 'name': 'Name', 'amount': 'Amount',
     'net_balance': 'NET FREE BALANCE', 'deficit': '(Deficit)', 'quick_conv': 'QUICK CONVERTER',
     'amount_to_convert': 'Amount to convert', 'customs': 'CUSTOMS & SHIPPING', 'price': 'Price',
-    'weight': 'Weight (Kg)', 'origin': 'Item Origin', 'proxy_cost': 'Proxy / Courier Cost',
+    'weight': 'Weight (Kg)', 'origin': 'Item Origin', 'proxy_cost': 'Proxy Cost',
     'destination': 'Destination (Customs)', 'calc_prompt': 'Enter data to calculate...',
     'copied': 'Copied to clipboard', 'settings': 'Settings', 'dark_mode': 'Dark Mode',
     'theme_color': 'Theme Color', 'language': 'Language', 'value': 'Value', 'freight': 'Freight',
@@ -54,21 +59,21 @@ class _SyncraAppState extends State<SyncraApp> {
     _loadSettings();
   }
 
-  Future<void> _loadSettings() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
+  void _loadSettings() {
+    final box = Hive.box('settingsBox');
     setState(() {
-      _themeMode = (prefs.getBool('isDark') ?? false) ? ThemeMode.dark : ThemeMode.light;
-      _seedColor = Color(prefs.getInt('themeColor') ?? 0xFF29B6F6);
-      _language = prefs.getString('language') ?? 'es';
+      _themeMode = (box.get('isDark', defaultValue: false)) ? ThemeMode.dark : ThemeMode.light;
+      _seedColor = Color(box.get('themeColor', defaultValue: 0xFF29B6F6));
+      _language = box.get('language', defaultValue: 'es');
       _isLoading = false;
     });
   }
 
-  void _updateSettings(ThemeMode tm, Color color, String lang) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    prefs.setBool('isDark', tm == ThemeMode.dark);
-    prefs.setInt('themeColor', color.value);
-    prefs.setString('language', lang);
+  void _updateSettings(ThemeMode tm, Color color, String lang) {
+    final box = Hive.box('settingsBox');
+    box.put('isDark', tm == ThemeMode.dark);
+    box.put('themeColor', color.value);
+    box.put('language', lang);
     setState(() {
       _themeMode = tm;
       _seedColor = color;
@@ -106,6 +111,7 @@ class MainScreen extends StatefulWidget {
   final bool isDark;
   final Color seedColor;
   final Function(ThemeMode, Color, String) onSettingsChanged;
+
   const MainScreen({super.key, required this.currentLang, required this.isDark, required this.seedColor, required this.onSettingsChanged});
 
   @override
@@ -115,9 +121,11 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   late PageController _pageController; 
-  SharedPreferences? prefs;
+  late Box dataBox;
+  final NumberFormat numFormat = NumberFormat('#,##0.00', 'en_US');
+
   Map<String, double> tasasCambio = { 'USD': 1.0, 'BRL': 5.0, 'PEN': 3.7, 'EUR': 0.92, 'VES': 36.5, 'MXN': 17.5, 'JPY': 155.0 };
-  
+
   // Variables Presupuesto
   String monedaLocal = 'USD';
   String monedaRef = 'BRL';
@@ -127,13 +135,13 @@ class _MainScreenState extends State<MainScreen> {
   Map<String, double> gastos = {};
   double balanceLocal = 0.0;
   double balanceEq = 0.0;
-  
+
   // Variables Conversor
   TextEditingController convMontoCtrl = TextEditingController();
   String monedaDe = 'USD';
   String monedaA = 'PEN';
   double resultadoConversion = 0.0;
-  
+
   // Variables Envíos
   TextEditingController precioEnvioCtrl = TextEditingController();
   TextEditingController pesoEnvioCtrl = TextEditingController();
@@ -146,15 +154,22 @@ class _MainScreenState extends State<MainScreen> {
   String desgloseEnvio = "";
   double totalEnvio = 0.0;
 
+  // Motor de impuestos (Simulación JSON)
+  final Map<String, Map<String, dynamic>> taxRules = {
+    'Brasil': { 'limit': 50.0, 'under_limit_tax': 0.20, 'over_limit_tax': 0.60, 'state_tax_icms': 0.17 }, // 17% Santa Catarina
+    'Perú': { 'limit': 200.0, 'under_limit_tax': 0.0, 'over_limit_tax': 0.22, 'state_tax_icms': 0.0 },
+    'México': { 'limit': 50.0, 'under_limit_tax': 0.0, 'over_limit_tax': 0.19, 'state_tax_icms': 0.0 },
+    'EE.UU.': { 'limit': 800.0, 'under_limit_tax': 0.0, 'over_limit_tax': 0.10, 'state_tax_icms': 0.0 },
+    'Europa': { 'limit': 150.0, 'under_limit_tax': 0.21, 'over_limit_tax': 0.235, 'state_tax_icms': 0.0 },
+    'Japón': { 'limit': 0.0, 'under_limit_tax': 0.10, 'over_limit_tax': 0.10, 'state_tax_icms': 0.0 },
+    'Venezuela': { 'limit': 0.0, 'under_limit_tax': 0.30, 'over_limit_tax': 0.30, 'state_tax_icms': 0.0 },
+  };
+
   final List<Color> themeColors = [
-    const Color(0xFF29B6F6),
-    const Color(0xFF81C784),
-    const Color(0xFFBA68C8),
-    const Color(0xFFFF8A65),
-    const Color(0xFFF06292),
-    const Color(0xFF90A4AE),
+    const Color(0xFF29B6F6), const Color(0xFF81C784), const Color(0xFFBA68C8),
+    const Color(0xFFFF8A65), const Color(0xFFF06292), const Color(0xFF90A4AE),
   ];
-  
+
   String t(String key) => i18n[widget.currentLang]?[key] ?? key;
 
   @override
@@ -162,6 +177,7 @@ class _MainScreenState extends State<MainScreen> {
     super.initState();
     _pageController = PageController(initialPage: _currentIndex);
     desgloseEnvio = t('calc_prompt');
+    dataBox = Hive.box('dataBox');
     _cargarDatosLocales();
     _actualizarTasasInternet();
   }
@@ -179,28 +195,25 @@ class _MainScreenState extends State<MainScreen> {
     super.dispose();
   }
 
-  Future<void> _cargarDatosLocales() async {
-    prefs = await SharedPreferences.getInstance();
+  void _cargarDatosLocales() {
     setState(() {
-      sueldoCtrl.text = prefs?.getString('sueldo') ?? "";
-      monedaLocal = prefs?.getString('monedaLocal') ?? "USD";
-      monedaRef = prefs?.getString('monedaRef') ?? "BRL";
-      monedaDe = prefs?.getString('monedaDe') ?? "USD";
-      monedaA = prefs?.getString('monedaA') ?? "PEN";
-      proxyCostoCtrl.text = prefs?.getString('proxyCosto') ?? "5.0";
-      monedaProxy = prefs?.getString('monedaProxy') ?? "USD";
+      sueldoCtrl.text = dataBox.get('sueldo', defaultValue: "");
+      monedaLocal = dataBox.get('monedaLocal', defaultValue: "USD");
+      monedaRef = dataBox.get('monedaRef', defaultValue: "BRL");
+      monedaDe = dataBox.get('monedaDe', defaultValue: "USD");
+      monedaA = dataBox.get('monedaA', defaultValue: "PEN");
+      proxyCostoCtrl.text = dataBox.get('proxyCosto', defaultValue: "5.0");
+      monedaProxy = dataBox.get('monedaProxy', defaultValue: "USD");
       
-      String? gastosJson = prefs?.getString('gastos');
+      Map<dynamic, dynamic>? gastosJson = dataBox.get('gastos');
       if (gastosJson != null) {
-        Map<String, dynamic> decoded = jsonDecode(gastosJson);
-        gastos = decoded.map((key, value) => MapEntry(key, (value as num).toDouble()));
+        gastos = gastosJson.map((key, value) => MapEntry(key.toString(), (value as num).toDouble()));
       }
       
-      String? tasasJson = prefs?.getString('tasas_historial');
+      Map<dynamic, dynamic>? tasasJson = dataBox.get('tasas_historial');
       if (tasasJson != null) {
-        Map<String, dynamic> decodedTasas = jsonDecode(tasasJson);
-        decodedTasas.forEach((key, value) {
-          if (tasasCambio.containsKey(key)) tasasCambio[key] = (value as num).toDouble();
+        tasasJson.forEach((key, value) {
+          if (tasasCambio.containsKey(key.toString())) tasasCambio[key.toString()] = (value as num).toDouble();
         });
       }
       _recalcularTodo();
@@ -208,14 +221,14 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _guardarDatos() {
-    prefs?.setString('sueldo', sueldoCtrl.text);
-    prefs?.setString('monedaLocal', monedaLocal);
-    prefs?.setString('monedaRef', monedaRef);
-    prefs?.setString('monedaDe', monedaDe);
-    prefs?.setString('monedaA', monedaA);
-    prefs?.setString('proxyCosto', proxyCostoCtrl.text);
-    prefs?.setString('monedaProxy', monedaProxy);
-    prefs?.setString('gastos', jsonEncode(gastos));
+    dataBox.put('sueldo', sueldoCtrl.text);
+    dataBox.put('monedaLocal', monedaLocal);
+    dataBox.put('monedaRef', monedaRef);
+    dataBox.put('monedaDe', monedaDe);
+    dataBox.put('monedaA', monedaA);
+    dataBox.put('proxyCosto', proxyCostoCtrl.text);
+    dataBox.put('monedaProxy', monedaProxy);
+    dataBox.put('gastos', gastos);
   }
 
   Future<void> _actualizarTasasInternet() async {
@@ -228,7 +241,7 @@ class _MainScreenState extends State<MainScreen> {
           for (var m in tasasCambio.keys) {
             if (rates.containsKey(m)) tasasCambio[m] = (rates[m] as num).toDouble();
           }
-          prefs?.setString('tasas_historial', jsonEncode(tasasCambio));
+          dataBox.put('tasas_historial', tasasCambio);
           _recalcularTodo(); 
         });
       }
@@ -251,14 +264,12 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  Future<void> _copiarResultado(String texto) async {
-    String numeros = texto.replaceAll(RegExp(r'[^0-9.]'), '');
+  Future<void> _copiarResultado(String numeros) async {
     if (numeros.isNotEmpty) {
       await Clipboard.setData(ClipboardData(text: numeros));
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('copied'))));
     }
   }
-
 
     // --- MATEMÁTICAS ---
   void _calcularPresupuesto() {
@@ -292,31 +303,36 @@ class _MainScreenState extends State<MainScreen> {
     double precioUsd = precioOrigen / (tasasCambio[monedaOrigenEnvio] ?? 1.0);
     double proxyFeeUsd = costoProxyInput / (tasasCambio[monedaProxy] ?? 1.0);
     double costoEnvioUsd = 0.0;
-    double impuestoUsd = 0.0;
-    if (origenEnvio == 'Nacional') { costoEnvioUsd = 4.0 + (pesoKg * 2.5); }
-    else if (origenEnvio == 'China') { costoEnvioUsd = 3.0 + (pesoKg * 15.0); }
-    else if (origenEnvio == 'EE.UU.') { costoEnvioUsd = 12.0 + (pesoKg * 9.0); }
-    else if (origenEnvio == 'Japón') { costoEnvioUsd = 15.0 + (pesoKg * 22.0); }
-    else if (origenEnvio == 'Europa') { costoEnvioUsd = 14.0 + (pesoKg * 18.0); }
+    
+    if (origenEnvio == 'Nacional') costoEnvioUsd = 4.0 + (pesoKg * 2.5);
+    else if (origenEnvio == 'China') costoEnvioUsd = 3.0 + (pesoKg * 15.0);
+    else if (origenEnvio == 'EE.UU.') costoEnvioUsd = 12.0 + (pesoKg * 9.0);
+    else if (origenEnvio == 'Japón') costoEnvioUsd = 15.0 + (pesoKg * 22.0);
+    else if (origenEnvio == 'Europa') costoEnvioUsd = 14.0 + (pesoKg * 18.0);
 
     double baseCif = precioUsd + costoEnvioUsd + proxyFeeUsd;
-    switch (destinoEnvio) {
-      case 'Brasil': impuestoUsd = precioUsd <= 50.0 ? baseCif * 0.20 : baseCif * 0.92; break;
-      case 'Perú': impuestoUsd = precioUsd <= 200.0 ? 0.0 : baseCif * 0.22; break;
-      case 'México': impuestoUsd = precioUsd <= 50.0 ? 0.0 : baseCif * 0.19; break;
-      case 'EE.UU.': impuestoUsd = precioUsd <= 800.0 ? 0.0 : baseCif * 0.10; break;
-      case 'Europa': impuestoUsd = (baseCif * 0.21) + (precioUsd > 150.0 ? baseCif * 0.025 : 0.0); break;
-      case 'Japón': impuestoUsd = baseCif * 0.10; break;
-      case 'Venezuela': impuestoUsd = baseCif * 0.30; break;
-      default: impuestoUsd = baseCif * 0.30;
+    
+    // Motor Dinámico de Impuestos (JSON)
+    var rule = taxRules[destinoEnvio] ?? { 'limit': 0.0, 'under_limit_tax': 0.30, 'over_limit_tax': 0.30, 'state_tax_icms': 0.0 };
+    double baseTaxRate = precioUsd <= rule['limit'] ? rule['under_limit_tax'] : rule['over_limit_tax'];
+    double federalTaxUsd = baseCif * baseTaxRate;
+    double baseWithFederal = baseCif + federalTaxUsd;
+    
+    double impuestoUsd = 0.0;
+    if (rule['state_tax_icms'] > 0) {
+      // Cálculo del impuesto estatal "Por dentro"
+      double finalGrossValue = baseWithFederal / (1 - rule['state_tax_icms']);
+      impuestoUsd = finalGrossValue - baseCif;
+    } else {
+      impuestoUsd = federalTaxUsd;
     }
 
     double totalUsd = baseCif + impuestoUsd;
     setState(() {
       totalEnvio = totalUsd * (tasasCambio[monedaDestinoEnvio] ?? 1.0);
-      desgloseEnvio = "${t('value')} (USD): \$${precioUsd.toStringAsFixed(2)}\n${t('freight')}: \$${costoEnvioUsd.toStringAsFixed(2)}"
-          "${proxyFeeUsd > 0 ? ' | ${t('proxy')}: \$${proxyFeeUsd.toStringAsFixed(2)}' : ''}"
-          "${impuestoUsd > 0 ? ' | ${t('tax')}: \$${impuestoUsd.toStringAsFixed(2)}' : ''}";
+      desgloseEnvio = "${t('value')} (USD): \$${numFormat.format(precioUsd)}\n${t('freight')}: \$${numFormat.format(costoEnvioUsd)}"
+          "${proxyFeeUsd > 0 ? ' | ${t('proxy')}: \$${numFormat.format(proxyFeeUsd)}' : ''}"
+          "${impuestoUsd > 0 ? ' | ${t('tax')}: \$${numFormat.format(impuestoUsd)}' : ''}";
     });
     _guardarDatos();
   }
@@ -387,7 +403,6 @@ class _MainScreenState extends State<MainScreen> {
   // --- INTERFAZ ---
   @override
   Widget build(BuildContext context) {
-    List<Widget> screens = [ _buildPresupuestoTab(), _buildConversorTab(), _buildEnviosTab() ];
     return Scaffold(
       appBar: AppBar(
         title: null, 
@@ -404,12 +419,15 @@ class _MainScreenState extends State<MainScreen> {
       body: SafeArea(
         child: PageView(
           controller: _pageController,
+          physics: const ClampingScrollPhysics(), // Físicas más fluidas
           onPageChanged: (index) {
-            setState(() {
-              _currentIndex = index;
-            });
+            setState(() { _currentIndex = index; });
           },
-          children: screens,
+          children: [
+             _buildPresupuestoTab(),
+             _buildConversorTab(),
+             _buildEnviosTab()
+          ],
         ),
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -418,8 +436,8 @@ class _MainScreenState extends State<MainScreen> {
         onTap: (index) {
           _pageController.animateToPage(
             index,
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeInOut,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic, // Animación slide perfeccionada
           );
         },
         items: [
@@ -525,7 +543,7 @@ class _MainScreenState extends State<MainScreen> {
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text("${entry.value.toStringAsFixed(2)} $monedaLocal", style: const TextStyle(fontWeight: FontWeight.w500)),
+                  Text("${numFormat.format(entry.value)} $monedaLocal", style: const TextStyle(fontWeight: FontWeight.w500)),
                   IconButton(icon: const Icon(Icons.delete, color: Color(0xFFFF8A80)), onPressed: () { setState(() { gastos.remove(entry.key); _calcularPresupuesto(); }); })
                 ],
               ),
@@ -542,11 +560,11 @@ class _MainScreenState extends State<MainScreen> {
                   Text(t('net_balance'), style: TextStyle(color: Theme.of(context).colorScheme.onPrimary, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   Text(
-                    "${balanceLocal.toStringAsFixed(2)} $monedaLocal ${balanceLocal < 0 ? t('deficit') : ''}",
+                    "${numFormat.format(balanceLocal)} $monedaLocal ${balanceLocal < 0 ? t('deficit') : ''}",
                     style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onPrimary),
                     textAlign: TextAlign.center,
                   ),
-                  Text("Eq: ${balanceEq.toStringAsFixed(2)} $monedaRef", style: TextStyle(color: Theme.of(context).colorScheme.onPrimary.withOpacity(0.8), fontSize: 13)),
+                  Text("Eq: ${numFormat.format(balanceEq)} $monedaRef", style: TextStyle(color: Theme.of(context).colorScheme.onPrimary.withOpacity(0.8), fontSize: 13)),
                 ],
               ),
             ),
@@ -602,7 +620,7 @@ class _MainScreenState extends State<MainScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text("${resultadoConversion.toStringAsFixed(2)} $monedaA", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
+                  Text("${numFormat.format(resultadoConversion)} $monedaA", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
                   IconButton(icon: const Icon(Icons.copy), color: Theme.of(context).colorScheme.primary, onPressed: () => _copiarResultado(resultadoConversion.toStringAsFixed(2)))
                 ],
               )
@@ -666,7 +684,7 @@ class _MainScreenState extends State<MainScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Flexible(child: Text("${totalEnvio.toStringAsFixed(2)} $monedaDestinoEnvio", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary), overflow: TextOverflow.ellipsis)),
+                  Flexible(child: Text("${numFormat.format(totalEnvio)} $monedaDestinoEnvio", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary), overflow: TextOverflow.ellipsis)),
                   IconButton(icon: const Icon(Icons.copy), color: Theme.of(context).colorScheme.primary, onPressed: () => _copiarResultado(totalEnvio.toStringAsFixed(2)))
                 ],
               )
