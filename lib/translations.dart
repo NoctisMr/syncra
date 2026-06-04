@@ -12,6 +12,7 @@ const Map<String, Map<String, String>> i18n = {
     'proxy': 'Proxy', 'tax': 'Aduana', 'current_rate': 'Tasa Actual:',
     'cat_shopping': 'Compras', 'cat_services': 'Servicios', 'cat_subs': 'Suscripciones',
     'cat_food': 'Comida', 'cat_others': 'Otros', 'available': 'Disponible',
+    'last_update': 'Última actualización de tasas:',
   },
   'en': {
     'budget': 'Budget', 'converter': 'Converter', 'shipping': 'Shipping',
@@ -26,5 +27,6 @@ const Map<String, Map<String, String>> i18n = {
     'proxy': 'Proxy', 'tax': 'Tax', 'current_rate': 'Current Rate:',
     'cat_shopping': 'Shopping', 'cat_services': 'Services', 'cat_subs': 'Subs',
     'cat_food': 'Food', 'cat_others': 'Others', 'available': 'Available',
+    'last_update': 'Last rates update:',
   }
 };
