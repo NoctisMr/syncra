@@ -25,6 +25,25 @@ jobs:
       - name: Personalizar nombre visible de la App
         run: sed -i 's/android:label="syncra"/android:label="Syncra"/g' android/app/src/main/AndroidManifest.xml || true
 
+      - name: Inyectar Permisos de Internet en Android
+        run: |
+          python3 -c "
+          import os
+          path = 'android/app/src/main/AndroidManifest.xml'
+          if os.path.exists(path):
+              with open(path, 'r', encoding='utf-8') as f:
+                  code = f.read()
+              if 'android.permission.INTERNET' not in code:
+                  nuevo_codigo = code.replace('<application', '<uses-permission android:name=\"android.permission.INTERNET\" />\n    <uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\" />\n    <application')
+                  with open(path, 'w', encoding='utf-8') as f:
+                      f.write(nuevo_codigo)
+                  print('--- Permisos de red inyectados correctamente en el manifiesto ---')
+              else:
+                  print('--- Los permisos ya estaban presentes ---')
+          else:
+              print('--- Error: No se encontró el AndroidManifest.xml ---')
+          "
+
       - name: Forzar compatibilidad con Android Moderno (API 34)
         run: |
           sed -i 's/compileSdkVersion.*/compileSdkVersion 34/g' android/app/build.gradle || true
