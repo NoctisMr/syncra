@@ -106,7 +106,7 @@ class _MainScreenState extends State<MainScreen> {
 
   // --- VARIABLES PRESUPUESTO ---
   String monedaLocal = 'USD';
-  String monedaRef = 'USD'; // Por defecto fijado en Dólar (USD)
+  String monedaRef = 'USD'; 
   TextEditingController sueldoCtrl = TextEditingController();
   TextEditingController nombreGastoCtrl = TextEditingController();
   TextEditingController montoGastoCtrl = TextEditingController();
@@ -184,7 +184,7 @@ class _MainScreenState extends State<MainScreen> {
     setState(() {
       sueldoCtrl.text = dataBox.get('sueldo', defaultValue: "");
       monedaLocal = dataBox.get('monedaLocal', defaultValue: "USD");
-      monedaRef = dataBox.get('monedaRef', defaultValue: "USD"); // Forzar USD por defecto
+      monedaRef = dataBox.get('monedaRef', defaultValue: "USD"); 
       monedaDe = dataBox.get('monedaDe', defaultValue: "USD");
       monedaA = dataBox.get('monedaA', defaultValue: "USD");
       proxyCostoCtrl.text = dataBox.get('proxyCosto', defaultValue: "5.0");
@@ -225,10 +225,15 @@ class _MainScreenState extends State<MainScreen> {
     String paisDetectado = "Otros";
     String monedaDetectada = "USD";
     String codigoPais = "";
+    
+    final headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Accept': 'application/json'
+    };
 
-    // 1. GEO-LOCALIZACIÓN IP (Sin solicitudes de permisos GPS del OS)
+        // 1. GEOLOCALIZACIÓN POR IP
     try {
-      final locResponse = await http.get(Uri.parse('https://ipapi.co/json/')).timeout(const Duration(seconds: 4));
+      final locResponse = await http.get(Uri.parse('https://ipapi.co/json/'), headers: headers).timeout(const Duration(seconds: 5));
       if (locResponse.statusCode == 200) {
         final locData = jsonDecode(locResponse.body);
         codigoPais = locData['country_code'] ?? '';
@@ -238,7 +243,6 @@ class _MainScreenState extends State<MainScreen> {
           monedaDetectada = incomingCurrency;
         }
 
-        // Mapeo geográfico de reglas aduaneras locales
         if (codigoPais == 'BR') paisDetectado = 'Brasil';
         else if (codigoPais == 'PE') paisDetectado = 'Perú';
         else if (codigoPais == 'MX') paisDetectado = 'México';
@@ -247,11 +251,13 @@ class _MainScreenState extends State<MainScreen> {
         else if (codigoPais == 'VE') paisDetectado = 'Venezuela';
         else if (['ES','FR','DE','IT','NL'].contains(codigoPais)) paisDetectado = 'Europa';
       }
-    } catch (_) { /* Red no disponible, se salta el paso de re-ubicación */ }
+    } catch (e) {
+      debugPrint('Fallo de Red en localización geográfica: $e');
+    }
 
-    // 2. DESCARGA DE COTIZACIONES DE DIVISAS
+    // 2. DESCARGA DE TASAS DE CAMBIO
     try {
-      final response = await http.get(Uri.parse('https://open.er-api.com/v6/latest/USD')).timeout(const Duration(seconds: 5));
+      final response = await http.get(Uri.parse('https://open.er-api.com/v6/latest/USD'), headers: headers).timeout(const Duration(seconds: 6));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final rates = data['rates'] as Map<String, dynamic>;
@@ -265,7 +271,6 @@ class _MainScreenState extends State<MainScreen> {
           dataBox.put('ultima_actualizacion', ultimaActualizacion);
           dataBox.put('tasas_historial', tasasCambio);
 
-          // VERIFICACIÓN DINÁMICA DE CAMBIO DE PAÍS
           String ultimoPaisRegistrado = dataBox.get('ultimo_pais_code', defaultValue: "");
           if (codigoPais.isNotEmpty && codigoPais != ultimoPaisRegistrado) {
             monedaLocal = monedaDetectada;
@@ -277,10 +282,13 @@ class _MainScreenState extends State<MainScreen> {
 
           _recalcularTodo(); 
         });
+      } else {
+        throw Exception('Código de respuesta de API inválido: ${response.statusCode}');
       }
     } catch (e) {
+      debugPrint('Error crítico al actualizar cotizaciones: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Modo offline: Usando tasas locales'), duration: Duration(seconds: 2)));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Modo offline: Usando tasas locales guardadas'), duration: Duration(seconds: 3)));
       }
     }
   }
@@ -415,7 +423,7 @@ class _MainScreenState extends State<MainScreen> {
               monedaDe: monedaDe,
               monedaA: monedaA,
               resultadoConversion: resultadoConversion,
-              ultimaActualizacion: ultimaActualizacion, // INYECCIÓN DE TIEMPO
+              ultimaActualizacion: ultimaActualizacion, 
               onMonedasChanged: (de, a) => setState(() { monedaDe = de; monedaA = a; _calcularConversion(); }),
               onCalcular: _calcularConversion,
               pegarNumeros: _pegarNumeros,
