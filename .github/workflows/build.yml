@@ -34,8 +34,10 @@ jobs:
           sed -i 's/minSdkVersion.*/minSdkVersion 21/g' android/app/build.gradle || true
           sed -i 's/minSdk.*/minSdk 21/g' android/app/build.gradle || true
 
-      - name: Instalar dependencias
-        run: flutter pub get
+      - name: Limpiar e Instalar dependencias
+        run: |
+          flutter clean
+          flutter pub get
 
       - name: Inyectar el Logo de la App
         run: dart run flutter_launcher_icons
