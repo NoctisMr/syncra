@@ -102,10 +102,11 @@ class _MainScreenState extends State<MainScreen> {
   final NumberFormat numFormat = NumberFormat('#,##0.00', 'en_US');
 
   Map<String, double> tasasCambio = { 'USD': 1.0, 'BRL': 5.0, 'PEN': 3.7, 'EUR': 0.92, 'VES': 36.5, 'MXN': 17.5, 'JPY': 155.0 };
+  String ultimaActualizacion = "---";
 
   // --- VARIABLES PRESUPUESTO ---
   String monedaLocal = 'USD';
-  String monedaRef = 'BRL';
+  String monedaRef = 'USD'; // Por defecto fijado en Dólar (USD)
   TextEditingController sueldoCtrl = TextEditingController();
   TextEditingController nombreGastoCtrl = TextEditingController();
   TextEditingController montoGastoCtrl = TextEditingController();
@@ -116,7 +117,7 @@ class _MainScreenState extends State<MainScreen> {
   // --- VARIABLES CONVERSOR ---
   TextEditingController convMontoCtrl = TextEditingController();
   String monedaDe = 'USD';
-  String monedaA = 'PEN';
+  String monedaA = 'USD';
   double resultadoConversion = 0.0;
 
   // --- VARIABLES ENVÍOS ---
@@ -163,7 +164,7 @@ class _MainScreenState extends State<MainScreen> {
     desgloseEnvio = t('calc_prompt');
     dataBox = Hive.box('dataBox');
     _cargarDatosLocales();
-    _actualizarTasasInternet();
+    _sincronizarUbicacionYTasas();
   }
 
   @override
@@ -183,27 +184,18 @@ class _MainScreenState extends State<MainScreen> {
     setState(() {
       sueldoCtrl.text = dataBox.get('sueldo', defaultValue: "");
       monedaLocal = dataBox.get('monedaLocal', defaultValue: "USD");
-      monedaRef = dataBox.get('monedaRef', defaultValue: "BRL");
+      monedaRef = dataBox.get('monedaRef', defaultValue: "USD"); // Forzar USD por defecto
       monedaDe = dataBox.get('monedaDe', defaultValue: "USD");
-      monedaA = dataBox.get('monedaA', defaultValue: "PEN");
+      monedaA = dataBox.get('monedaA', defaultValue: "USD");
       proxyCostoCtrl.text = dataBox.get('proxyCosto', defaultValue: "5.0");
       monedaProxy = dataBox.get('monedaProxy', defaultValue: "USD");
+      ultimaActualizacion = dataBox.get('ultima_actualizacion', defaultValue: "---");
+      destinoEnvio = dataBox.get('destinoEnvio', defaultValue: "Brasil");
+      monedaDestinoEnvio = dataBox.get('monedaDestinoEnvio', defaultValue: "USD");
       
       var gastosGuardadosV2 = dataBox.get('gastos_v2');
       if (gastosGuardadosV2 != null) {
         gastos = List<Map<String, dynamic>>.from(gastosGuardadosV2.map((e) => Map<String, dynamic>.from(e)));
-      } else {
-        Map<dynamic, dynamic>? gastosAntiguos = dataBox.get('gastos');
-        if (gastosAntiguos != null) {
-          gastosAntiguos.forEach((key, value) {
-            gastos.add({
-              'id': DateTime.now().millisecondsSinceEpoch.toString() + key.toString(),
-              'nombre': key.toString(),
-              'monto': (value as num).toDouble(),
-              'categoria': 'cat_others'
-            });
-          });
-        }
       }
       
       Map<dynamic, dynamic>? tasasJson = dataBox.get('tasas_historial');
@@ -224,20 +216,65 @@ class _MainScreenState extends State<MainScreen> {
     dataBox.put('monedaA', monedaA);
     dataBox.put('proxyCosto', proxyCostoCtrl.text);
     dataBox.put('monedaProxy', monedaProxy);
+    dataBox.put('destinoEnvio', destinoEnvio);
+    dataBox.put('monedaDestinoEnvio', monedaDestinoEnvio);
     dataBox.put('gastos_v2', gastos);
   }
 
-  Future<void> _actualizarTasasInternet() async {
+  Future<void> _sincronizarUbicacionYTasas() async {
+    String paisDetectado = "Otros";
+    String monedaDetectada = "USD";
+    String codigoPais = "";
+
+    // 1. GEO-LOCALIZACIÓN IP (Sin solicitudes de permisos GPS del OS)
+    try {
+      final locResponse = await http.get(Uri.parse('https://ipapi.co/json/')).timeout(const Duration(seconds: 4));
+      if (locResponse.statusCode == 200) {
+        final locData = jsonDecode(locResponse.body);
+        codigoPais = locData['country_code'] ?? '';
+        String incomingCurrency = locData['currency'] ?? 'USD';
+
+        if (tasasCambio.containsKey(incomingCurrency)) {
+          monedaDetectada = incomingCurrency;
+        }
+
+        // Mapeo geográfico de reglas aduaneras locales
+        if (codigoPais == 'BR') paisDetectado = 'Brasil';
+        else if (codigoPais == 'PE') paisDetectado = 'Perú';
+        else if (codigoPais == 'MX') paisDetectado = 'México';
+        else if (codigoPais == 'US') paisDetectado = 'EE.UU.';
+        else if (codigoPais == 'JP') paisDetectado = 'Japón';
+        else if (codigoPais == 'VE') paisDetectado = 'Venezuela';
+        else if (['ES','FR','DE','IT','NL'].contains(codigoPais)) paisDetectado = 'Europa';
+      }
+    } catch (_) { /* Red no disponible, se salta el paso de re-ubicación */ }
+
+    // 2. DESCARGA DE COTIZACIONES DE DIVISAS
     try {
       final response = await http.get(Uri.parse('https://open.er-api.com/v6/latest/USD')).timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final rates = data['rates'] as Map<String, dynamic>;
+        
         setState(() {
           for (var m in tasasCambio.keys) {
             if (rates.containsKey(m)) tasasCambio[m] = (rates[m] as num).toDouble();
           }
+
+          ultimaActualizacion = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
+          dataBox.put('ultima_actualizacion', ultimaActualizacion);
           dataBox.put('tasas_historial', tasasCambio);
+
+          // VERIFICACIÓN DINÁMICA DE CAMBIO DE PAÍS
+          String ultimoPaisRegistrado = dataBox.get('ultimo_pais_code', defaultValue: "");
+          if (codigoPais.isNotEmpty && codigoPais != ultimoPaisRegistrado) {
+            monedaLocal = monedaDetectada;
+            monedaDe = monedaDetectada;
+            destinoEnvio = paisDetectado;
+            monedaDestinoEnvio = monedaDetectada;
+            dataBox.put('ultimo_pais_code', codigoPais);
+          }
+
           _recalcularTodo(); 
         });
       }
@@ -378,6 +415,7 @@ class _MainScreenState extends State<MainScreen> {
               monedaDe: monedaDe,
               monedaA: monedaA,
               resultadoConversion: resultadoConversion,
+              ultimaActualizacion: ultimaActualizacion, // INYECCIÓN DE TIEMPO
               onMonedasChanged: (de, a) => setState(() { monedaDe = de; monedaA = a; _calcularConversion(); }),
               onCalcular: _calcularConversion,
               pegarNumeros: _pegarNumeros,
