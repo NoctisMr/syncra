@@ -54,7 +54,7 @@ Tu app, tus reglas. Syncra se adapta a tu estilo visual y preferencias de idioma
   &nbsp;&nbsp;&nbsp;
   <img src="screenshots/envios.jpg" width="220" alt="Pantalla de Envíos">
   &nbsp;&nbsp;&nbsp;
-  <img src="screenshots/ajustes_oscuro.jpg" width="220" alt="Menú de Ajustes y Modo Oscuro">
+  <img src="screenshots/ajustes_oscuros.jpg" width="220" alt="Menú de Ajustes y Modo Oscuro">
 </p>
 
 ---
