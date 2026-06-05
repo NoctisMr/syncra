@@ -14,6 +14,7 @@ class PresupuestoTab extends StatefulWidget {
   final List<Map<String, dynamic>> gastos;
   final String monedaLocal;
   final double balanceLocal;
+  final double balanceEq;
   final VoidCallback onCalcular;
   final Function(Map<String, dynamic>) onGastoAdded;
   final Function(String) onGastoDeleted;
@@ -32,6 +33,7 @@ class PresupuestoTab extends StatefulWidget {
     required this.gastos,
     required this.monedaLocal,
     required this.balanceLocal,
+    required this.balanceEq,
     required this.onCalcular,
     required this.onGastoAdded,
     required this.onGastoDeleted,
@@ -47,6 +49,7 @@ class PresupuestoTab extends StatefulWidget {
 class _PresupuestoTabState extends State<PresupuestoTab> {
   int touhedChartIndex = -1;
   String categoriaSeleccionada = 'cat_others';
+  String? monedaGastoSeleccionada;
 
   String t(String key) => i18n[widget.currentLang]?[key] ?? key;
 
@@ -55,7 +58,7 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
 
     Map<String, double> sumasPorCategoria = {};
     for (var g in widget.gastos) {
-      sumasPorCategoria[g['categoria']] = (sumasPorCategoria[g['categoria']] ?? 0.0) + (g['monto'] as double);
+      sumasPorCategoria[g['categoria']] = (sumasPorCategoria[g['categoria']] ?? 0.0) + (g['monto'] as num).toDouble();
     }
 
     List<PieChartSectionData> sections = [];
@@ -65,7 +68,12 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
       final isTouched = indexCounter == touhedChartIndex;
       final fontSize = isTouched ? 16.0 : 12.0;
       final radius = isTouched ? 50.0 : 40.0;
-      final catColor = Color(widget.categoriesConfig.firstWhere((c) => c['id'] == catId)['color']);
+      
+      final catConfig = widget.categoriesConfig.firstWhere(
+        (c) => c['id'] == catId,
+        orElse: () => {'color': 0xFF90A4AE},
+      );
+      final catColor = Color(catConfig['color']);
 
       sections.add(PieChartSectionData(
         color: catColor,
@@ -94,6 +102,8 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
   Widget build(BuildContext context) {
     double sueldo = double.tryParse(widget.sueldoCtrl.text) ?? 0.0;
     bool hasData = sueldo > 0 || widget.gastos.isNotEmpty;
+    String currentMonedaGasto = monedaGastoSeleccionada ?? widget.monedaLocal;
+    if (!widget.tasasCambio.containsKey(currentMonedaGasto)) currentMonedaGasto = widget.monedaLocal;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -161,7 +171,7 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                       ),
                       borderData: FlBorderData(show: false),
                       sectionsSpace: 3,
-                      centerSpaceRadius: 60,
+                      centerSpaceRadius: 65,
                       sections: _generateChartSections(sueldo),
                     ),
                   ),
@@ -174,6 +184,21 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                         style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: widget.balanceLocal >= 0 ? Theme.of(context).colorScheme.primary : Colors.red),
                       ),
                       Text(widget.monedaLocal, style: const TextStyle(fontSize: 10)),
+                      
+                      if (widget.monedaLocal != 'USD') ...[
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(6)
+                          ),
+                          child: Text(
+                            "~ \$${widget.numFormat.format(widget.balanceEq)} USD",
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurfaceVariant)
+                          ),
+                        )
+                      ]
                     ],
                   )
                 ],
@@ -222,9 +247,20 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Expanded(flex: 2, child: TextField(controller: widget.nombreGastoCtrl, decoration: InputDecoration(hintText: t('name'), border: const UnderlineInputBorder()))),
+                      Expanded(flex: 3, child: TextField(controller: widget.nombreGastoCtrl, decoration: InputDecoration(hintText: t('name'), border: const UnderlineInputBorder()))),
                       const SizedBox(width: 8),
-                      Expanded(child: TextField(controller: widget.montoGastoCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(hintText: t('amount'), border: const UnderlineInputBorder()))),
+                      Expanded(flex: 3, child: TextField(controller: widget.montoGastoCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(hintText: t('amount'), border: const UnderlineInputBorder()))),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 2,
+                        child: DropdownButtonFormField<String>(
+                          value: currentMonedaGasto,
+                          decoration: const InputDecoration(border: UnderlineInputBorder(), contentPadding: EdgeInsets.zero),
+                          style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurface),
+                          items: widget.tasasCambio.keys.map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+                          onChanged: (val) => setState(() => monedaGastoSeleccionada = val),
+                        )
+                      ),
                       IconButton(
                         icon: const Icon(Icons.add_circle, size: 36),
                         color: Theme.of(context).colorScheme.primary,
@@ -235,7 +271,9 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                             widget.onGastoAdded({
                               'id': DateTime.now().millisecondsSinceEpoch.toString(),
                               'nombre': nombre,
-                              'monto': monto,
+                              'monto_original': monto,
+                              'moneda_original': currentMonedaGasto,
+                              'monto': monto, // Se recalcula en _calcularPresupuesto
                               'categoria': categoriaSeleccionada
                             });
                             widget.nombreGastoCtrl.clear();
@@ -252,6 +290,11 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
           const SizedBox(height: 12),
           ...widget.gastos.map((gasto) {
             final catConfig = widget.categoriesConfig.firstWhere((c) => c['id'] == gasto['categoria'], orElse: () => widget.categoriesConfig.last);
+            
+            double montoOriginal = (gasto['monto_original'] ?? gasto['monto'] as num).toDouble();
+            String monedaOrig = gasto['moneda_original'] ?? widget.monedaLocal;
+            bool esExtranjero = monedaOrig != widget.monedaLocal;
+
             return Dismissible(
               key: Key(gasto['id']),
               direction: DismissDirection.endToStart,
@@ -274,7 +317,15 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                   leading: CircleAvatar(backgroundColor: Color(catConfig['color']).withOpacity(0.2), child: Icon(catConfig['icon'], color: Color(catConfig['color']), size: 20)),
                   title: Text(gasto['nombre'], style: const TextStyle(fontWeight: FontWeight.w500)),
                   subtitle: Text(t(gasto['categoria']), style: const TextStyle(fontSize: 11)),
-                  trailing: Text("${widget.numFormat.format(gasto['monto'])} ${widget.monedaLocal}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  trailing: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text("${widget.numFormat.format(montoOriginal)} $monedaOrig", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      if (esExtranjero)
+                        Text("~ ${widget.numFormat.format(gasto['monto'])} ${widget.monedaLocal}", style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    ],
+                  ),
                 ),
               ),
             );
