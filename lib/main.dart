@@ -102,7 +102,7 @@ class _MainScreenState extends State<MainScreen> {
   final NumberFormat numFormat = NumberFormat('#,##0.00', 'en_US');
 
   Map<String, double> tasasCambio = { 'USD': 1.0, 'BRL': 5.0, 'PEN': 3.7, 'EUR': 0.92, 'VES': 36.5, 'MXN': 17.5, 'JPY': 155.0 };
-  String ultimaActualizacion = "---";
+  int ultimaActualizacionEpoch = 0;
 
   // --- VARIABLES PRESUPUESTO ---
   String monedaLocal = 'USD';
@@ -113,6 +113,10 @@ class _MainScreenState extends State<MainScreen> {
   List<Map<String, dynamic>> gastos = [];
   double balanceLocal = 0.0;
   double balanceEq = 0.0;
+
+  // --- VARIABLES SPREAD GLOBAL ---
+  bool applySpread = false;
+  TextEditingController spreadCtrl = TextEditingController(text: "3.0");
 
   // --- VARIABLES CONVERSOR ---
   TextEditingController convMontoCtrl = TextEditingController();
@@ -131,6 +135,7 @@ class _MainScreenState extends State<MainScreen> {
   String monedaDestinoEnvio = 'USD';
   String desgloseEnvio = "";
   double totalEnvio = 0.0;
+  List<Map<String, dynamic>> cotizaciones = [];
 
   final Map<String, Map<String, dynamic>> taxRules = {
     'Brasil': { 'limit': 50.0, 'under_limit_tax': 0.20, 'over_limit_tax': 0.60, 'state_tax_icms': 0.17 },
@@ -177,6 +182,7 @@ class _MainScreenState extends State<MainScreen> {
     precioEnvioCtrl.dispose();
     pesoEnvioCtrl.dispose();
     proxyCostoCtrl.dispose();
+    spreadCtrl.dispose();
     super.dispose();
   }
 
@@ -189,13 +195,21 @@ class _MainScreenState extends State<MainScreen> {
       monedaA = dataBox.get('monedaA', defaultValue: "USD");
       proxyCostoCtrl.text = dataBox.get('proxyCosto', defaultValue: "5.0");
       monedaProxy = dataBox.get('monedaProxy', defaultValue: "USD");
-      ultimaActualizacion = dataBox.get('ultima_actualizacion', defaultValue: "---");
       destinoEnvio = dataBox.get('destinoEnvio', defaultValue: "Brasil");
       monedaDestinoEnvio = dataBox.get('monedaDestinoEnvio', defaultValue: "USD");
+      ultimaActualizacionEpoch = dataBox.get('ultima_actualizacion_epoch', defaultValue: 0);
+      
+      applySpread = dataBox.get('apply_spread', defaultValue: false);
+      spreadCtrl.text = dataBox.get('spread_value', defaultValue: "3.0");
       
       var gastosGuardadosV2 = dataBox.get('gastos_v2');
       if (gastosGuardadosV2 != null) {
         gastos = List<Map<String, dynamic>>.from(gastosGuardadosV2.map((e) => Map<String, dynamic>.from(e)));
+      }
+
+      var cotGuardadas = dataBox.get('cotizaciones');
+      if (cotGuardadas != null) {
+        cotizaciones = List<Map<String, dynamic>>.from(cotGuardadas.map((e) => Map<String, dynamic>.from(e)));
       }
       
       Map<dynamic, dynamic>? tasasJson = dataBox.get('tasas_historial');
@@ -218,7 +232,10 @@ class _MainScreenState extends State<MainScreen> {
     dataBox.put('monedaProxy', monedaProxy);
     dataBox.put('destinoEnvio', destinoEnvio);
     dataBox.put('monedaDestinoEnvio', monedaDestinoEnvio);
+    dataBox.put('apply_spread', applySpread);
+    dataBox.put('spread_value', spreadCtrl.text);
     dataBox.put('gastos_v2', gastos);
+    dataBox.put('cotizaciones', cotizaciones);
   }
 
   Future<void> _sincronizarUbicacionYTasas() async {
@@ -231,7 +248,6 @@ class _MainScreenState extends State<MainScreen> {
       'Accept': 'application/json'
     };
 
-    // 1. GEOLOCALIZACIÓN POR IP
     try {
       final locResponse = await http.get(Uri.parse('https://ipapi.co/json/'), headers: headers).timeout(const Duration(seconds: 5));
       if (locResponse.statusCode == 200) {
@@ -255,20 +271,21 @@ class _MainScreenState extends State<MainScreen> {
       debugPrint('Fallo de Red en localización geográfica: $e');
     }
 
-    // 2. DESCARGA DE TASAS DE CAMBIO
     try {
       final response = await http.get(Uri.parse('https://open.er-api.com/v6/latest/USD'), headers: headers).timeout(const Duration(seconds: 6));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final rates = data['rates'] as Map<String, dynamic>;
         
+        if (!mounted) return;
+
         setState(() {
           for (var m in tasasCambio.keys) {
             if (rates.containsKey(m)) tasasCambio[m] = (rates[m] as num).toDouble();
           }
 
-          ultimaActualizacion = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-          dataBox.put('ultima_actualizacion', ultimaActualizacion);
+          ultimaActualizacionEpoch = DateTime.now().millisecondsSinceEpoch;
+          dataBox.put('ultima_actualizacion_epoch', ultimaActualizacionEpoch);
           dataBox.put('tasas_historial', tasasCambio);
 
           String ultimoPaisRegistrado = dataBox.get('ultimo_pais_code', defaultValue: "");
@@ -301,9 +318,23 @@ class _MainScreenState extends State<MainScreen> {
 
   void _calcularPresupuesto() {
     double sueldo = double.tryParse(sueldoCtrl.text) ?? 0.0;
-    double totalGastos = gastos.fold(0.0, (sum, item) => sum + (item['monto'] as double));
+    double totalGastosLocales = 0.0;
+    
+    for (var item in gastos) {
+      // Soporte retroactivo a gastos sin moneda_original
+      double montoOriginal = (item['monto_original'] ?? item['monto'] as num).toDouble();
+      String monedaOrig = item['moneda_original'] ?? monedaLocal;
+      
+      // Conversión cruzada usando USD como puente (o tasa directa)
+      double valorEnUsd = montoOriginal / (tasasCambio[monedaOrig] ?? 1.0);
+      double valorLocalCalculado = valorEnUsd * (tasasCambio[monedaLocal] ?? 1.0);
+      
+      item['monto'] = valorLocalCalculado; 
+      totalGastosLocales += valorLocalCalculado;
+    }
+
     setState(() {
-      balanceLocal = sueldo - totalGastos;
+      balanceLocal = sueldo - totalGastosLocales;
       double netoUsd = balanceLocal / (tasasCambio[monedaLocal] ?? 1.0);
       balanceEq = netoUsd * (tasasCambio[monedaRef] ?? 1.0);
     });
@@ -313,7 +344,17 @@ class _MainScreenState extends State<MainScreen> {
   void _calcularConversion() {
     double monto = double.tryParse(convMontoCtrl.text) ?? 0.0;
     double montoUsd = monto / (tasasCambio[monedaDe] ?? 1.0);
-    setState(() { resultadoConversion = montoUsd * (tasasCambio[monedaA] ?? 1.0); });
+    double conversionBase = montoUsd * (tasasCambio[monedaA] ?? 1.0);
+    
+    double spreadPercent = double.tryParse(spreadCtrl.text) ?? 0.0;
+    
+    setState(() { 
+      if (applySpread && spreadPercent > 0) {
+        resultadoConversion = conversionBase * (1 + (spreadPercent / 100));
+      } else {
+        resultadoConversion = conversionBase;
+      }
+    });
     _guardarDatos();
   }
 
@@ -352,13 +393,40 @@ class _MainScreenState extends State<MainScreen> {
     }
 
     double totalUsd = baseCif + impuestoUsd;
+    double spreadPercent = double.tryParse(spreadCtrl.text) ?? 0.0;
+    
     setState(() {
-      totalEnvio = totalUsd * (tasasCambio[monedaDestinoEnvio] ?? 1.0);
+      double totalBaseFinal = totalUsd * (tasasCambio[monedaDestinoEnvio] ?? 1.0);
+      
+      if (applySpread && spreadPercent > 0) {
+        totalEnvio = totalBaseFinal * (1 + (spreadPercent / 100));
+      } else {
+        totalEnvio = totalBaseFinal;
+      }
+      
       desgloseEnvio = "${t('value')} (USD): \$${numFormat.format(precioUsd)}\n${t('freight')}: \$${numFormat.format(costoEnvioUsd)}"
           "${proxyFeeUsd > 0 ? ' | ${t('proxy')}: \$${numFormat.format(proxyFeeUsd)}' : ''}"
-          "${impuestoUsd > 0 ? ' | ${t('tax')}: \$${numFormat.format(impuestoUsd)}' : ''}";
+          "${impuestoUsd > 0 ? ' | ${t('tax')}: \$${numFormat.format(impuestoUsd)}' : ''}"
+          "${applySpread && spreadPercent > 0 ? '\n+ ${t('bank_fee')}: $spreadPercent%' : ''}";
     });
     _guardarDatos();
+  }
+
+  void _guardarCotizacionHistorica() {
+    if (totalEnvio <= 0) return;
+    setState(() {
+      cotizaciones.insert(0, {
+        'id': DateTime.now().millisecondsSinceEpoch.toString(),
+        'fecha': DateFormat('dd/MM HH:mm').format(DateTime.now()),
+        'origen': origenEnvio,
+        'destino': destinoEnvio,
+        'peso': pesoEnvioCtrl.text.isEmpty ? "0" : pesoEnvioCtrl.text,
+        'total': totalEnvio,
+        'moneda': monedaDestinoEnvio
+      });
+    });
+    _guardarDatos();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('copied')), duration: const Duration(seconds: 2)));
   }
 
   Future<void> _pegarNumeros(TextEditingController ctrl, VoidCallback onDone) async {
@@ -408,6 +476,7 @@ class _MainScreenState extends State<MainScreen> {
               gastos: gastos,
               monedaLocal: monedaLocal,
               balanceLocal: balanceLocal,
+              balanceEq: balanceEq,
               onCalcular: _calcularPresupuesto,
               onGastoAdded: (gasto) => setState(() { gastos.insert(0, gasto); _calcularPresupuesto(); }),
               onGastoDeleted: (id) => setState(() { gastos.removeWhere((e) => e['id'] == id); _calcularPresupuesto(); }),
@@ -423,7 +492,10 @@ class _MainScreenState extends State<MainScreen> {
               monedaDe: monedaDe,
               monedaA: monedaA,
               resultadoConversion: resultadoConversion,
-              ultimaActualizacion: ultimaActualizacion, 
+              ultimaActualizacionEpoch: ultimaActualizacionEpoch, 
+              applySpread: applySpread,
+              spreadCtrl: spreadCtrl,
+              onSpreadToggle: (val) { setState(() { applySpread = val; _recalcularTodo(); }); },
               onMonedasChanged: (de, a) => setState(() { monedaDe = de; monedaA = a; _calcularConversion(); }),
               onCalcular: _calcularConversion,
               pegarNumeros: _pegarNumeros,
@@ -443,6 +515,12 @@ class _MainScreenState extends State<MainScreen> {
               monedaDestinoEnvio: monedaDestinoEnvio,
               desgloseEnvio: desgloseEnvio,
               totalEnvio: totalEnvio,
+              applySpread: applySpread,
+              spreadCtrl: spreadCtrl,
+              cotizaciones: cotizaciones,
+              onSpreadToggle: (val) { setState(() { applySpread = val; _recalcularTodo(); }); },
+              onGuardarCotizacion: _guardarCotizacionHistorica,
+              onEliminarCotizacion: (id) => setState(() { cotizaciones.removeWhere((e) => e['id'] == id); _guardarDatos(); }),
               onParametrosChanged: ({monedaProxy, origenEnvio, destinoEnvio, monedaOrigenEnvio, monedaDestinoEnvio}) {
                 setState(() {
                   if (monedaProxy != null) this.monedaProxy = monedaProxy;
@@ -472,56 +550,79 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _abrirAjustes() {
+    final settingsBox = Hive.box('settingsBox');
     showModalBottomSheet(
       isScrollControlled: true,
       context: context,
       builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(t('settings'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            bool isDarkLocal = settingsBox.get('isDark', defaultValue: false);
+            int themeColorLocal = settingsBox.get('themeColor', defaultValue: 0xFF29B6F6);
+            String langLocal = settingsBox.get('language', defaultValue: 'es');
+            Color seedColorLocal = Color(themeColorLocal);
+
+            return Container(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(t('language'), style: const TextStyle(fontSize: 16)),
-                  DropdownButton<String>(
-                    value: widget.currentLang,
-                    items: const [ DropdownMenuItem(value: 'es', child: Text("Español")), DropdownMenuItem(value: 'en', child: Text("English")) ],
-                    onChanged: (val) {
-                      widget.onSettingsChanged(widget.isDark ? ThemeMode.dark : ThemeMode.light, widget.seedColor, val!);
-                      Navigator.pop(context);
+                  Text(t('settings'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(t('language'), style: const TextStyle(fontSize: 16)),
+                      DropdownButton<String>(
+                        value: langLocal,
+                        items: const [ 
+                          DropdownMenuItem(value: 'es', child: Text("Español")), 
+                          DropdownMenuItem(value: 'en', child: Text("English")),
+                          DropdownMenuItem(value: 'pt', child: Text("Português (BR)"))
+                        ],
+                        onChanged: (val) {
+                          widget.onSettingsChanged(isDarkLocal ? ThemeMode.dark : ThemeMode.light, seedColorLocal, val!);
+                          setModalState(() {});
+                          Navigator.pop(context);
+                        },
+                      )
+                    ],
+                  ),
+                  SwitchListTile(
+                    title: Text(t('dark_mode')), 
+                    value: isDarkLocal, 
+                    contentPadding: EdgeInsets.zero,
+                    onChanged: (val) { 
+                      widget.onSettingsChanged(val ? ThemeMode.dark : ThemeMode.light, seedColorLocal, langLocal); 
+                      setModalState(() {});
                     },
+                  ),
+                  const SizedBox(height: 10),
+                  Text(t('theme_color'), style: const TextStyle(fontSize: 16)),
+                  const SizedBox(height: 10),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: themeColors.map((color) => GestureDetector(
+                        onTap: () {
+                          widget.onSettingsChanged(isDarkLocal ? ThemeMode.dark : ThemeMode.light, color, langLocal);
+                          setModalState(() {});
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(right: 12), width: 40, height: 40,
+                          decoration: BoxDecoration(
+                            color: color, shape: BoxShape.circle,
+                            border: Border.all(color: seedColorLocal == color ? Colors.black54 : Colors.transparent, width: 3),
+                          ),
+                        ),
+                      )).toList(),
+                    ),
                   )
                 ],
               ),
-              SwitchListTile(
-                title: Text(t('dark_mode')), value: widget.isDark, contentPadding: EdgeInsets.zero,
-                onChanged: (val) { widget.onSettingsChanged(val ? ThemeMode.dark : ThemeMode.light, widget.seedColor, widget.currentLang); },
-              ),
-              const SizedBox(height: 10),
-              Text(t('theme_color'), style: const TextStyle(fontSize: 16)),
-              const SizedBox(height: 10),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: themeColors.map((color) => GestureDetector(
-                    onTap: () => widget.onSettingsChanged(widget.isDark ? ThemeMode.dark : ThemeMode.light, color, widget.currentLang),
-                    child: Container(
-                      margin: const EdgeInsets.only(right: 12), width: 40, height: 40,
-                      decoration: BoxDecoration(
-                        color: color, shape: BoxShape.circle,
-                        border: Border.all(color: widget.seedColor == color ? Colors.black54 : Colors.transparent, width: 3),
-                      ),
-                    ),
-                  )).toList(),
-                ),
-              )
-            ],
-          ),
+            );
+          }
         );
       }
     );
