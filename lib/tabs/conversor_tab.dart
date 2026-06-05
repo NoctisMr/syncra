@@ -10,9 +10,12 @@ class ConversorTab extends StatefulWidget {
   final String monedaDe;
   final String monedaA;
   final double resultadoConversion;
-  final String ultimaActualizacion; // NUEVO PARAMETRO
+  final int ultimaActualizacionEpoch;
+  final bool applySpread;
+  final TextEditingController spreadCtrl;
   final Function(String, String) onMonedasChanged;
   final VoidCallback onCalcular;
+  final Function(bool) onSpreadToggle;
   final Future<void> Function(TextEditingController, VoidCallback) pegarNumeros;
   final Future<void> Function(String) copiarResultado;
 
@@ -25,9 +28,12 @@ class ConversorTab extends StatefulWidget {
     required this.monedaDe,
     required this.monedaA,
     required this.resultadoConversion,
-    required this.ultimaActualizacion,
+    required this.ultimaActualizacionEpoch,
+    required this.applySpread,
+    required this.spreadCtrl,
     required this.onMonedasChanged,
     required this.onCalcular,
+    required this.onSpreadToggle,
     required this.pegarNumeros,
     required this.copiarResultado,
   });
@@ -43,24 +49,36 @@ class _ConversorTabState extends State<ConversorTab> {
   @override
   Widget build(BuildContext context) {
     double formulaTasa = (widget.tasasCambio[widget.monedaA] ?? 1.0) / (widget.tasasCambio[widget.monedaDe] ?? 1.0);
+    
+    // Evaluar si los datos tienen más de 24 horas (86,400,000 milisegundos)
+    bool isOutdated = widget.ultimaActualizacionEpoch > 0 && 
+                     (DateTime.now().millisecondsSinceEpoch - widget.ultimaActualizacionEpoch > 86400000);
+    
+    String formattedDate = widget.ultimaActualizacionEpoch == 0 
+        ? "---" 
+        : DateFormat('dd/MM/yyyy HH:mm').format(DateTime.fromMillisecondsSinceEpoch(widget.ultimaActualizacionEpoch));
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          // CUADRO SUPERIOR DE ÚLTIMA ACTUALIZACIÓN
           Card(
-            color: Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.4),
+            color: isOutdated ? Colors.red.withOpacity(0.1) : Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.4),
             elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: isOutdated ? Colors.redAccent.withOpacity(0.5) : Colors.transparent)
+            ),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.history, size: 16, color: Theme.of(context).colorScheme.onSecondaryContainer),
+                  Icon(isOutdated ? Icons.warning_amber_rounded : Icons.history, size: 16, color: isOutdated ? Colors.redAccent : Theme.of(context).colorScheme.onSecondaryContainer),
                   const SizedBox(width: 8),
                   Text(
-                    "${t('last_update')} ${widget.ultimaActualizacion}",
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSecondaryContainer),
+                    isOutdated ? "${t('outdated_rates')} $formattedDate" : "${t('last_update')} $formattedDate",
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: isOutdated ? Colors.redAccent : Theme.of(context).colorScheme.onSecondaryContainer),
                   ),
                 ],
               ),
@@ -105,6 +123,36 @@ class _ConversorTabState extends State<ConversorTab> {
                     ],
                   ),
                   const SizedBox(height: 12),
+                  
+                  // CONTROLES DE SPREAD (Comisión Bancaria)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                      borderRadius: BorderRadius.circular(8)
+                    ),
+                    child: Row(
+                      children: [
+                        Checkbox(
+                          value: widget.applySpread,
+                          onChanged: (val) => widget.onSpreadToggle(val ?? false),
+                        ),
+                        Text(t('apply_fee'), style: const TextStyle(fontSize: 12)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: widget.spreadCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            enabled: widget.applySpread,
+                            decoration: InputDecoration(labelText: t('bank_fee'), border: InputBorder.none),
+                            onChanged: (_) => widget.onCalcular(),
+                          ),
+                        )
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
                   Center(
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
