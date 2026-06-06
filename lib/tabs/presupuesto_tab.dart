@@ -12,6 +12,7 @@ class PresupuestoTab extends StatefulWidget {
   final TextEditingController nombreGastoCtrl;
   final TextEditingController montoGastoCtrl;
   final List<Map<String, dynamic>> gastos;
+  final List<Map<String, dynamic>> bovedas;
   final String monedaLocal;
   final double balanceLocal;
   final double balanceEq;
@@ -19,6 +20,9 @@ class PresupuestoTab extends StatefulWidget {
   final Function(Map<String, dynamic>) onGastoAdded;
   final Function(String) onGastoDeleted;
   final Function(String) onMonedaLocalChanged;
+  final Function(String, double, String) onBovedaAdded;
+  final Function(String, double, bool) onBovedaModified;
+  final Function(String) onBovedaDeleted;
   final List<Map<String, dynamic>> categoriesConfig;
   final Future<void> Function(TextEditingController, VoidCallback) pegarNumeros;
 
@@ -31,6 +35,7 @@ class PresupuestoTab extends StatefulWidget {
     required this.nombreGastoCtrl,
     required this.montoGastoCtrl,
     required this.gastos,
+    required this.bovedas,
     required this.monedaLocal,
     required this.balanceLocal,
     required this.balanceEq,
@@ -38,6 +43,9 @@ class PresupuestoTab extends StatefulWidget {
     required this.onGastoAdded,
     required this.onGastoDeleted,
     required this.onMonedaLocalChanged,
+    required this.onBovedaAdded,
+    required this.onBovedaModified,
+    required this.onBovedaDeleted,
     required this.categoriesConfig,
     required this.pegarNumeros,
   });
@@ -54,7 +62,7 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
   String t(String key) => i18n[widget.currentLang]?[key] ?? key;
 
   List<PieChartSectionData> _generateChartSections(double sueldoTotal) {
-    if (sueldoTotal == 0 && widget.gastos.isEmpty) return [];
+    if (sueldoTotal == 0 && widget.gastos.isEmpty && widget.bovedas.isEmpty) return [];
 
     Map<String, double> sumasPorCategoria = {};
     for (var g in widget.gastos) {
@@ -66,24 +74,29 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
 
     sumasPorCategoria.forEach((catId, montoSumado) {
       final isTouched = indexCounter == touhedChartIndex;
-      final fontSize = isTouched ? 16.0 : 12.0;
-      final radius = isTouched ? 50.0 : 40.0;
-      
-      final catConfig = widget.categoriesConfig.firstWhere(
-        (c) => c['id'] == catId,
-        orElse: () => {'color': 0xFF90A4AE},
-      );
-      final catColor = Color(catConfig['color']);
-
+      final catConfig = widget.categoriesConfig.firstWhere((c) => c['id'] == catId, orElse: () => {'color': 0xFF90A4AE});
       sections.add(PieChartSectionData(
-        color: catColor,
+        color: Color(catConfig['color']),
         value: montoSumado,
         title: sueldoTotal > 0 ? '${((montoSumado / sueldoTotal) * 100).toStringAsFixed(0)}%' : '',
-        radius: radius,
-        titleStyle: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold, color: Colors.white),
+        radius: isTouched ? 50.0 : 40.0,
+        titleStyle: TextStyle(fontSize: isTouched ? 16.0 : 12.0, fontWeight: FontWeight.bold, color: Colors.white),
       ));
       indexCounter++;
     });
+
+    // Añadir el dinero de las bóvedas al gráfico
+    double totalBovedas = widget.bovedas.fold(0.0, (sum, b) => sum + (b['ahorrado_local'] as num).toDouble());
+    if (totalBovedas > 0) {
+      final isTouched = indexCounter == touhedChartIndex;
+      sections.add(PieChartSectionData(
+        color: Colors.amber.shade600,
+        value: totalBovedas,
+        title: '',
+        radius: isTouched ? 50.0 : 40.0,
+      ));
+      indexCounter++;
+    }
 
     if (widget.balanceLocal > 0) {
       final isTouched = indexCounter == touhedChartIndex;
@@ -98,10 +111,55 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
     return sections;
   }
 
+  void _mostrarDialogoBoveda({String? id, bool esAporte = true}) {
+    TextEditingController amountCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(id == null ? t('create_vault') : (esAporte ? t('add_funds') : t('withdraw'))),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (id == null) TextField(controller: widget.nombreGastoCtrl, decoration: InputDecoration(labelText: t('name'))),
+            TextField(
+              controller: amountCtrl, 
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(labelText: "${t('amount')} (${widget.monedaLocal})"),
+            ),
+            if (id == null) DropdownButtonFormField<String>(
+              value: widget.monedaLocal,
+              decoration: const InputDecoration(labelText: 'Divisa Objetivo'),
+              items: widget.tasasCambio.keys.map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+              onChanged: (val) => monedaGastoSeleccionada = val,
+            )
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          FilledButton(
+            onPressed: () {
+              double? amount = double.tryParse(amountCtrl.text);
+              if (amount != null && amount > 0) {
+                if (id == null && widget.nombreGastoCtrl.text.isNotEmpty) {
+                  widget.onBovedaAdded(widget.nombreGastoCtrl.text, amount, monedaGastoSeleccionada ?? widget.monedaLocal);
+                  widget.nombreGastoCtrl.clear();
+                } else if (id != null) {
+                  widget.onBovedaModified(id, amount, esAporte);
+                }
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Confirmar'),
+          )
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     double sueldo = double.tryParse(widget.sueldoCtrl.text) ?? 0.0;
-    bool hasData = sueldo > 0 || widget.gastos.isNotEmpty;
+    bool hasData = sueldo > 0 || widget.gastos.isNotEmpty || widget.bovedas.isNotEmpty;
     String currentMonedaGasto = monedaGastoSeleccionada ?? widget.monedaLocal;
     if (!widget.tasasCambio.containsKey(currentMonedaGasto)) currentMonedaGasto = widget.monedaLocal;
 
@@ -110,6 +168,7 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // CABECERA SUELDO
           Card(
             elevation: 1,
             child: Padding(
@@ -142,39 +201,30 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                   onChanged: (_) => widget.onCalcular(),
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.paste), 
-                color: Theme.of(context).colorScheme.primary, 
-                onPressed: () => widget.pegarNumeros(widget.sueldoCtrl, widget.onCalcular)
-              )
+              IconButton(icon: const Icon(Icons.paste), color: Theme.of(context).colorScheme.primary, onPressed: () => widget.pegarNumeros(widget.sueldoCtrl, widget.onCalcular))
             ],
           ),
           const SizedBox(height: 20),
+          
+          // GRÁFICO
           if (hasData)
             SizedBox(
               height: 220,
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  PieChart(
-                    PieChartData(
-                      pieTouchData: PieTouchData(
-                        touchCallback: (FlTouchEvent event, pieTouchResponse) {
-                          setState(() {
-                            if (!event.isInterestedForInteractions || pieTouchResponse == null || pieTouchResponse.touchedSection == null) {
-                              touhedChartIndex = -1;
-                              return;
-                            }
-                            touhedChartIndex = pieTouchResponse.touchedSection!.touchedSectionIndex;
-                          });
-                        },
-                      ),
-                      borderData: FlBorderData(show: false),
-                      sectionsSpace: 3,
-                      centerSpaceRadius: 65,
-                      sections: _generateChartSections(sueldo),
-                    ),
-                  ),
+                  PieChart(PieChartData(
+                    pieTouchData: PieTouchData(touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                      setState(() {
+                        if (!event.isInterestedForInteractions || pieTouchResponse == null || pieTouchResponse.touchedSection == null) {
+                          touhedChartIndex = -1; return;
+                        }
+                        touhedChartIndex = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                      });
+                    }),
+                    borderData: FlBorderData(show: false), sectionsSpace: 3, centerSpaceRadius: 65,
+                    sections: _generateChartSections(sueldo),
+                  )),
                   Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -184,19 +234,12 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                         style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: widget.balanceLocal >= 0 ? Theme.of(context).colorScheme.primary : Colors.red),
                       ),
                       Text(widget.monedaLocal, style: const TextStyle(fontSize: 10)),
-                      
                       if (widget.monedaLocal != 'USD') ...[
                         const SizedBox(height: 4),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(6)
-                          ),
-                          child: Text(
-                            "~ \$${widget.numFormat.format(widget.balanceEq)} USD",
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurfaceVariant)
-                          ),
+                          decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(6)),
+                          child: Text("~ \$${widget.numFormat.format(widget.balanceEq)} USD", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                         )
                       ]
                     ],
@@ -205,6 +248,76 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
               ),
             ),
           const SizedBox(height: 16),
+
+                   // SECCIÓN BÓVEDAS (METAS)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(t('vaults'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+              IconButton(icon: const Icon(Icons.add_box, color: Colors.amber), onPressed: () => _mostrarDialogoBoveda()),
+            ],
+          ),
+          if (widget.bovedas.isNotEmpty)
+            SizedBox(
+              height: 140,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: widget.bovedas.length,
+                itemBuilder: (context, index) {
+                  var b = widget.bovedas[index];
+                  // Matemática Mágica de Conversión Dinámica
+                  double ahorradoEnUsd = b['ahorrado_local'] / (widget.tasasCambio[widget.monedaLocal] ?? 1.0);
+                  double ahorradoEnDivisaObjetivo = ahorradoEnUsd * (widget.tasasCambio[b['moneda_objetivo']] ?? 1.0);
+                  double progreso = (ahorradoEnDivisaObjetivo / b['monto_objetivo']).clamp(0.0, 1.0);
+
+                  return Container(
+                    width: 200, margin: const EdgeInsets.only(right: 12),
+                    child: Card(
+                      color: Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.5),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(child: Text(b['nombre'], style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                GestureDetector(
+                                  onTap: () => widget.onBovedaDeleted(b['id']),
+                                  child: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
+                                )
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            LinearProgressIndicator(value: progreso, backgroundColor: Colors.black12, color: Colors.amber),
+                            const SizedBox(height: 4),
+                            Text("${(progreso * 100).toStringAsFixed(1)}% de ${widget.numFormat.format(b['monto_objetivo'])} ${b['moneda_objetivo']}", style: const TextStyle(fontSize: 10)),
+                            const Spacer(),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text("${widget.numFormat.format(b['ahorrado_local'])} ${widget.monedaLocal}", style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
+                                Row(
+                                  children: [
+                                    GestureDetector(onTap: () => _mostrarDialogoBoveda(id: b['id'], esAporte: false), child: const Icon(Icons.remove_circle, color: Colors.redAccent, size: 24)),
+                                    const SizedBox(width: 4),
+                                    GestureDetector(onTap: () => _mostrarDialogoBoveda(id: b['id'], esAporte: true), child: const Icon(Icons.add_circle, color: Colors.green, size: 24)),
+                                  ],
+                                )
+                              ],
+                            )
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          const SizedBox(height: 16),
+
+          // SECCIÓN GASTOS DIARIOS
           Card(
             elevation: 1,
             child: Padding(
@@ -223,8 +336,7 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                           onTap: () => setState(() => categoriaSeleccionada = cat['id']),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
-                            margin: const EdgeInsets.only(right: 8),
-                            padding: const EdgeInsets.all(8),
+                            margin: const EdgeInsets.only(right: 8), padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
                               color: isSelected ? Color(cat['color']).withOpacity(0.2) : Colors.transparent,
                               borderRadius: BorderRadius.circular(12),
@@ -233,10 +345,7 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                             child: Row(
                               children: [
                                 Icon(cat['icon'], size: 16, color: Color(cat['color'])),
-                                if (isSelected) ...[
-                                  const SizedBox(width: 4),
-                                  Text(t(cat['id']), style: TextStyle(fontSize: 12, color: Color(cat['color']), fontWeight: FontWeight.bold))
-                                ]
+                                if (isSelected) ...[ const SizedBox(width: 4), Text(t(cat['id']), style: TextStyle(fontSize: 12, color: Color(cat['color']), fontWeight: FontWeight.bold)) ]
                               ],
                             ),
                           ),
@@ -273,11 +382,10 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                               'nombre': nombre,
                               'monto_original': monto,
                               'moneda_original': currentMonedaGasto,
-                              'monto': monto, // Se recalcula en _calcularPresupuesto
+                              'monto': monto,
                               'categoria': categoriaSeleccionada
                             });
-                            widget.nombreGastoCtrl.clear();
-                            widget.montoGastoCtrl.clear();
+                            widget.nombreGastoCtrl.clear(); widget.montoGastoCtrl.clear();
                           }
                         },
                       )
@@ -290,7 +398,6 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
           const SizedBox(height: 12),
           ...widget.gastos.map((gasto) {
             final catConfig = widget.categoriesConfig.firstWhere((c) => c['id'] == gasto['categoria'], orElse: () => widget.categoriesConfig.last);
-            
             double montoOriginal = (gasto['monto_original'] ?? gasto['monto'] as num).toDouble();
             String monedaOrig = gasto['moneda_original'] ?? widget.monedaLocal;
             bool esExtranjero = monedaOrig != widget.monedaLocal;
@@ -301,29 +408,22 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
               background: Container(
                 margin: const EdgeInsets.symmetric(vertical: 4),
                 decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(8)),
-                alignment: Alignment.centerRight,
-                padding: const EdgeInsets.only(right: 20),
+                alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20),
                 child: const Icon(Icons.delete, color: Colors.white),
               ),
-              onDismissed: (direction) {
-                widget.onGastoDeleted(gasto['id']);
-                HapticFeedback.mediumImpact();
-              },
+              onDismissed: (direction) { widget.onGastoDeleted(gasto['id']); HapticFeedback.mediumImpact(); },
               child: Card(
                 margin: const EdgeInsets.symmetric(vertical: 4),
-                color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
-                elevation: 0,
+                color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3), elevation: 0,
                 child: ListTile(
                   leading: CircleAvatar(backgroundColor: Color(catConfig['color']).withOpacity(0.2), child: Icon(catConfig['icon'], color: Color(catConfig['color']), size: 20)),
                   title: Text(gasto['nombre'], style: const TextStyle(fontWeight: FontWeight.w500)),
                   subtitle: Text(t(gasto['categoria']), style: const TextStyle(fontSize: 11)),
                   trailing: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text("${widget.numFormat.format(montoOriginal)} $monedaOrig", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                      if (esExtranjero)
-                        Text("~ ${widget.numFormat.format(gasto['monto'])} ${widget.monedaLocal}", style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                      if (esExtranjero) Text("~ ${widget.numFormat.format(gasto['monto'])} ${widget.monedaLocal}", style: const TextStyle(fontSize: 11, color: Colors.grey)),
                     ],
                   ),
                 ),
