@@ -16,6 +16,11 @@ const Map<String, Map<String, String>> i18n = {
     'bank_fee': 'Comisión Bancaria (%)', 'apply_fee': 'Aplicar Spread',
     'save_quote': 'Guardar Cotización', 'saved_quotes': 'Cotizaciones Guardadas',
     'outdated_rates': '⚠️ Atención: Tasas de hace +24h', 'exp_currency': 'Divisa',
+    'vaults': 'MIS BÓVEDAS (METAS)', 'create_vault': 'Crear Bóveda', 'target': 'Objetivo',
+    'saved': 'Ahorrado', 'add_funds': 'Aportar', 'withdraw': 'Retirar',
+    'scan_price': 'Escanear Precio', 'cart': 'Carrito:', 'process_cart': 'Procesar Compra',
+    'purchase_type': '¿Dónde se compró?', 'physical': 'Tienda Física', 'shipping_type': 'Para Envío',
+    'reading_text': 'Leyendo texto...', 'no_price_found': 'No se detectaron precios claros.',
   },
   'en': {
     'budget': 'Budget', 'converter': 'Converter', 'shipping': 'Shipping',
@@ -34,6 +39,11 @@ const Map<String, Map<String, String>> i18n = {
     'bank_fee': 'Bank Fee (%)', 'apply_fee': 'Apply Spread',
     'save_quote': 'Save Quote', 'saved_quotes': 'Saved Quotes',
     'outdated_rates': '⚠️ Warning: Rates are +24h old', 'exp_currency': 'Currency',
+    'vaults': 'MY VAULTS (GOALS)', 'create_vault': 'Create Vault', 'target': 'Target',
+    'saved': 'Saved', 'add_funds': 'Add Funds', 'withdraw': 'Withdraw',
+    'scan_price': 'Scan Price', 'cart': 'Cart:', 'process_cart': 'Process Purchase',
+    'purchase_type': 'Where was it bought?', 'physical': 'Physical Store', 'shipping_type': 'For Shipping',
+    'reading_text': 'Reading text...', 'no_price_found': 'No clear prices detected.',
   },
   'pt': {
     'budget': 'Orçamento', 'converter': 'Conversor', 'shipping': 'Envios',
@@ -52,5 +62,10 @@ const Map<String, Map<String, String>> i18n = {
     'bank_fee': 'Taxa Bancária (%)', 'apply_fee': 'Aplicar Spread',
     'save_quote': 'Salvar Cotação', 'saved_quotes': 'Cotações Salvas',
     'outdated_rates': '⚠️ Atenção: Taxas desatualizadas (+24h)', 'exp_currency': 'Moeda',
+    'vaults': 'MEUS COFRES (METAS)', 'create_vault': 'Criar Cofre', 'target': 'Objetivo',
+    'saved': 'Guardado', 'add_funds': 'Adicionar', 'withdraw': 'Retirar',
+    'scan_price': 'Escanear Preço', 'cart': 'Carrinho:', 'process_cart': 'Processar Compra',
+    'purchase_type': 'Onde foi comprado?', 'physical': 'Loja Física', 'shipping_type': 'Para Envio',
+    'reading_text': 'Lendo texto...', 'no_price_found': 'Nenhum preço claro detectado.',
   }
 };
