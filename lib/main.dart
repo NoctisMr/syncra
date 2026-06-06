@@ -100,7 +100,7 @@ class _MainScreenState extends State<MainScreen> {
   TextEditingController nombreGastoCtrl = TextEditingController();
   TextEditingController montoGastoCtrl = TextEditingController();
   List<Map<String, dynamic>> gastos = [];
-  List<Map<String, dynamic>> bovedas = []; // NUEVO: Bóvedas Virtuales
+  List<Map<String, dynamic>> bovedas = [];
   double balanceLocal = 0.0;
   double balanceEq = 0.0;
 
@@ -270,7 +270,6 @@ class _MainScreenState extends State<MainScreen> {
       item['monto'] = valorLocalCalculado; totalGastosLocales += valorLocalCalculado;
     }
     
-    // El dinero en bóvedas se resta del Balance Libre
     double totalEnBovedas = bovedas.fold(0.0, (sum, b) => sum + (b['ahorrado_local'] as num).toDouble());
 
     setState(() {
@@ -297,7 +296,6 @@ class _MainScreenState extends State<MainScreen> {
     });
   }
 
-  // --- ENRUTAMIENTO DESDE ESCÁNER OCR ---
   void _enrutarCompra(double montoEscaneado, String tipo) {
     if (tipo == 'Fisica') {
       setState(() {
@@ -388,8 +386,89 @@ class _MainScreenState extends State<MainScreen> {
       if (numeros.isNotEmpty) { setState(() { ctrl.text = numeros; onDone(); }); }
     }
   }
+
   Future<void> _copiarResultado(String num) async {
     if (num.isNotEmpty) { await Clipboard.setData(ClipboardData(text: num)); HapticFeedback.lightImpact(); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('copied')))); }
+  }
+
+  // --- EL MÉTODO _abrirAjustes() ESTÁ AQUÍ COMPLETO ---
+  void _abrirAjustes() {
+    final settingsBox = Hive.box('settingsBox');
+    showModalBottomSheet(
+      isScrollControlled: true,
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            bool isDarkLocal = settingsBox.get('isDark', defaultValue: false);
+            int themeColorLocal = settingsBox.get('themeColor', defaultValue: 0xFF29B6F6);
+            String langLocal = settingsBox.get('language', defaultValue: 'es');
+            Color seedColorLocal = Color(themeColorLocal);
+
+            return Container(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(t('settings'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(t('language'), style: const TextStyle(fontSize: 16)),
+                      DropdownButton<String>(
+                        value: langLocal,
+                        items: const [ 
+                          DropdownMenuItem(value: 'es', child: Text("Español")), 
+                          DropdownMenuItem(value: 'en', child: Text("English")),
+                          DropdownMenuItem(value: 'pt', child: Text("Português (BR)"))
+                        ],
+                        onChanged: (val) {
+                          widget.onSettingsChanged(isDarkLocal ? ThemeMode.dark : ThemeMode.light, seedColorLocal, val!);
+                          setModalState(() {});
+                          Navigator.pop(context);
+                        },
+                      )
+                    ],
+                  ),
+                  SwitchListTile(
+                    title: Text(t('dark_mode')), 
+                    value: isDarkLocal, 
+                    contentPadding: EdgeInsets.zero,
+                    onChanged: (val) { 
+                      widget.onSettingsChanged(val ? ThemeMode.dark : ThemeMode.light, seedColorLocal, langLocal); 
+                      setModalState(() {});
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  Text(t('theme_color'), style: const TextStyle(fontSize: 16)),
+                  const SizedBox(height: 10),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: themeColors.map((color) => GestureDetector(
+                        onTap: () {
+                          widget.onSettingsChanged(isDarkLocal ? ThemeMode.dark : ThemeMode.light, color, langLocal);
+                          setModalState(() {});
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(right: 12), width: 40, height: 40,
+                          decoration: BoxDecoration(
+                            color: color, shape: BoxShape.circle,
+                            border: Border.all(color: seedColorLocal == color ? Colors.black54 : Colors.transparent, width: 3),
+                          ),
+                        ),
+                      )).toList(),
+                    ),
+                  )
+                ],
+              ),
+            );
+          }
+        );
+      }
+    );
   }
 
   @override
@@ -452,6 +531,4 @@ class _MainScreenState extends State<MainScreen> {
       ),
     );
   }
-
-  void _abrirAjustes()
 }
