@@ -44,14 +44,14 @@ jobs:
               print('--- Error: No se encontró el AndroidManifest.xml ---')
           "
 
-      - name: Forzar compatibilidad con Android Moderno (API 34)
+      - name: Forzar compatibilidad con Android Moderno (API 34) y ML Kit (API 24)
         run: |
           sed -i 's/compileSdkVersion.*/compileSdkVersion 34/g' android/app/build.gradle || true
           sed -i 's/compileSdk.*/compileSdk 34/g' android/app/build.gradle || true
           sed -i 's/targetSdkVersion.*/targetSdkVersion 34/g' android/app/build.gradle || true
           sed -i 's/targetSdk.*/targetSdk 34/g' android/app/build.gradle || true
-          sed -i 's/minSdkVersion.*/minSdkVersion 21/g' android/app/build.gradle || true
-          sed -i 's/minSdk.*/minSdk 21/g' android/app/build.gradle || true
+          sed -i 's/minSdkVersion.*/minSdkVersion 24/g' android/app/build.gradle || true
+          sed -i 's/minSdk.*/minSdk 24/g' android/app/build.gradle || true
 
       - name: Limpiar e Instalar dependencias
         run: |
