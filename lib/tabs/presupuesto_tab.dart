@@ -85,7 +85,6 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
       indexCounter++;
     });
 
-    // Añadir el dinero de las bóvedas al gráfico
     double totalBovedas = widget.bovedas.fold(0.0, (sum, b) => sum + (b['ahorrado_local'] as num).toDouble());
     if (totalBovedas > 0) {
       final isTouched = indexCounter == touhedChartIndex;
@@ -168,7 +167,6 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // CABECERA SUELDO
           Card(
             elevation: 1,
             child: Padding(
@@ -205,8 +203,6 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
             ],
           ),
           const SizedBox(height: 20),
-          
-          // GRÁFICO
           if (hasData)
             SizedBox(
               height: 220,
@@ -238,7 +234,8 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                         const SizedBox(height: 4),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(6)),
+                          // CORRECCIÓN APLICADA AQUÍ: surfaceVariant en lugar de surfaceContainerHighest
+                          decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceVariant, borderRadius: BorderRadius.circular(6)),
                           child: Text("~ \$${widget.numFormat.format(widget.balanceEq)} USD", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                         )
                       ]
@@ -247,9 +244,7 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                 ],
               ),
             ),
-          const SizedBox(height: 16),
-
-                   // SECCIÓN BÓVEDAS (METAS)
+                    const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -265,7 +260,6 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                 itemCount: widget.bovedas.length,
                 itemBuilder: (context, index) {
                   var b = widget.bovedas[index];
-                  // Matemática Mágica de Conversión Dinámica
                   double ahorradoEnUsd = b['ahorrado_local'] / (widget.tasasCambio[widget.monedaLocal] ?? 1.0);
                   double ahorradoEnDivisaObjetivo = ahorradoEnUsd * (widget.tasasCambio[b['moneda_objetivo']] ?? 1.0);
                   double progreso = (ahorradoEnDivisaObjetivo / b['monto_objetivo']).clamp(0.0, 1.0);
@@ -316,8 +310,6 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
               ),
             ),
           const SizedBox(height: 16),
-
-          // SECCIÓN GASTOS DIARIOS
           Card(
             elevation: 1,
             child: Padding(
