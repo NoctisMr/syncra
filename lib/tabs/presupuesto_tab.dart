@@ -1,54 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:provider/provider.dart';
 import '../translations.dart';
+import '../providers/syncra_provider.dart';
 
 class PresupuestoTab extends StatefulWidget {
-  final String currentLang;
-  final Map<String, double> tasasCambio;
-  final NumberFormat numFormat;
-  final TextEditingController sueldoCtrl;
-  final TextEditingController nombreGastoCtrl;
-  final TextEditingController montoGastoCtrl;
-  final List<Map<String, dynamic>> gastos;
-  final List<Map<String, dynamic>> bovedas;
-  final String monedaLocal;
-  final double balanceLocal;
-  final double balanceEq;
-  final VoidCallback onCalcular;
-  final Function(Map<String, dynamic>) onGastoAdded;
-  final Function(String) onGastoDeleted;
-  final Function(String) onMonedaLocalChanged;
-  final Function(String, double, String) onBovedaAdded;
-  final Function(String, double, bool) onBovedaModified;
-  final Function(String) onBovedaDeleted;
-  final List<Map<String, dynamic>> categoriesConfig;
-  final Future<void> Function(TextEditingController, VoidCallback) pegarNumeros;
-
-  const PresupuestoTab({
-    super.key,
-    required this.currentLang,
-    required this.tasasCambio,
-    required this.numFormat,
-    required this.sueldoCtrl,
-    required this.nombreGastoCtrl,
-    required this.montoGastoCtrl,
-    required this.gastos,
-    required this.bovedas,
-    required this.monedaLocal,
-    required this.balanceLocal,
-    required this.balanceEq,
-    required this.onCalcular,
-    required this.onGastoAdded,
-    required this.onGastoDeleted,
-    required this.onMonedaLocalChanged,
-    required this.onBovedaAdded,
-    required this.onBovedaModified,
-    required this.onBovedaDeleted,
-    required this.categoriesConfig,
-    required this.pegarNumeros,
-  });
+  const PresupuestoTab({super.key});
 
   @override
   State<PresupuestoTab> createState() => _PresupuestoTabState();
@@ -59,13 +17,19 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
   String categoriaSeleccionada = 'cat_others';
   String? monedaGastoSeleccionada;
 
-  String t(String key) => i18n[widget.currentLang]?[key] ?? key;
+  final List<Map<String, dynamic>> categoriesConfig = [
+    {'id': 'cat_shopping', 'color': 0xFF29B6F6, 'icon': Icons.shopping_bag},
+    {'id': 'cat_services', 'color': 0xFFFF8A65, 'icon': Icons.bolt},
+    {'id': 'cat_subs', 'color': 0xFFBA68C8, 'icon': Icons.subscriptions},
+    {'id': 'cat_food', 'color': 0xFF81C784, 'icon': Icons.restaurant},
+    {'id': 'cat_others', 'color': 0xFF90A4AE, 'icon': Icons.category},
+  ];
 
-  List<PieChartSectionData> _generateChartSections(double sueldoTotal) {
-    if (sueldoTotal == 0 && widget.gastos.isEmpty && widget.bovedas.isEmpty) return [];
+  List<PieChartSectionData> _generateChartSections(SyncraProvider provider, double sueldoTotal, String t(String key)) {
+    if (sueldoTotal == 0 && provider.gastos.isEmpty && provider.bovedas.isEmpty) return [];
 
     Map<String, double> sumasPorCategoria = {};
-    for (var g in widget.gastos) {
+    for (var g in provider.gastos) {
       sumasPorCategoria[g['categoria']] = (sumasPorCategoria[g['categoria']] ?? 0.0) + (g['monto'] as num).toDouble();
     }
 
@@ -74,7 +38,7 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
 
     sumasPorCategoria.forEach((catId, montoSumado) {
       final isTouched = indexCounter == touhedChartIndex;
-      final catConfig = widget.categoriesConfig.firstWhere((c) => c['id'] == catId, orElse: () => {'color': 0xFF90A4AE});
+      final catConfig = categoriesConfig.firstWhere((c) => c['id'] == catId, orElse: () => {'color': 0xFF90A4AE});
       sections.add(PieChartSectionData(
         color: Color(catConfig['color']),
         value: montoSumado,
@@ -85,7 +49,7 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
       indexCounter++;
     });
 
-    double totalBovedas = widget.bovedas.fold(0.0, (sum, b) => sum + (b['ahorrado_local'] as num).toDouble());
+    double totalBovedas = provider.bovedas.fold(0.0, (sum, b) => sum + (b['ahorrado_local'] as num).toDouble());
     if (totalBovedas > 0) {
       final isTouched = indexCounter == touhedChartIndex;
       sections.add(PieChartSectionData(
@@ -97,11 +61,11 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
       indexCounter++;
     }
 
-    if (widget.balanceLocal > 0) {
+    if (provider.balanceLocal > 0) {
       final isTouched = indexCounter == touhedChartIndex;
       sections.add(PieChartSectionData(
         color: Theme.of(context).colorScheme.primaryContainer,
-        value: widget.balanceLocal,
+        value: provider.balanceLocal,
         title: t('available'),
         radius: isTouched ? 50.0 : 40.0,
         titleStyle: TextStyle(fontSize: isTouched ? 14 : 11, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onPrimaryContainer),
@@ -110,7 +74,7 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
     return sections;
   }
 
-  void _mostrarDialogoBoveda({String? id, bool esAporte = true}) {
+  void _mostrarDialogoBoveda(SyncraProvider provider, String t(String key), {String? id, bool esAporte = true}) {
     TextEditingController amountCtrl = TextEditingController();
     showDialog(
       context: context,
@@ -119,16 +83,16 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (id == null) TextField(controller: widget.nombreGastoCtrl, decoration: InputDecoration(labelText: t('name'))),
+            if (id == null) TextField(controller: provider.nombreGastoCtrl, decoration: InputDecoration(labelText: t('name'))),
             TextField(
               controller: amountCtrl, 
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(labelText: "${t('amount')} (${widget.monedaLocal})"),
+              decoration: InputDecoration(labelText: "${t('amount')} (${provider.monedaLocal})"),
             ),
             if (id == null) DropdownButtonFormField<String>(
-              value: widget.monedaLocal,
+              value: provider.monedaLocal,
               decoration: const InputDecoration(labelText: 'Divisa Objetivo'),
-              items: widget.tasasCambio.keys.map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+              items: provider.tasasCambio.keys.map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
               onChanged: (val) => monedaGastoSeleccionada = val,
             )
           ],
@@ -139,11 +103,11 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
             onPressed: () {
               double? amount = double.tryParse(amountCtrl.text);
               if (amount != null && amount > 0) {
-                if (id == null && widget.nombreGastoCtrl.text.isNotEmpty) {
-                  widget.onBovedaAdded(widget.nombreGastoCtrl.text, amount, monedaGastoSeleccionada ?? widget.monedaLocal);
-                  widget.nombreGastoCtrl.clear();
+                if (id == null && provider.nombreGastoCtrl.text.isNotEmpty) {
+                  provider.addBoveda(provider.nombreGastoCtrl.text, amount, monedaGastoSeleccionada ?? provider.monedaLocal);
+                  provider.nombreGastoCtrl.clear();
                 } else if (id != null) {
-                  widget.onBovedaModified(id, amount, esAporte);
+                  provider.gestionarBoveda(id, amount, esAporte);
                 }
                 Navigator.pop(context);
               }
@@ -157,10 +121,14 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
 
   @override
   Widget build(BuildContext context) {
-    double sueldo = double.tryParse(widget.sueldoCtrl.text) ?? 0.0;
-    bool hasData = sueldo > 0 || widget.gastos.isNotEmpty || widget.bovedas.isNotEmpty;
-    String currentMonedaGasto = monedaGastoSeleccionada ?? widget.monedaLocal;
-    if (!widget.tasasCambio.containsKey(currentMonedaGasto)) currentMonedaGasto = widget.monedaLocal;
+    // AQUÍ ES DONDE SUCEDE LA MAGIA
+    final provider = context.watch<SyncraProvider>();
+    String t(String key) => i18n[provider.language]?[key] ?? key;
+
+    double sueldo = double.tryParse(provider.sueldoCtrl.text) ?? 0.0;
+    bool hasData = sueldo > 0 || provider.gastos.isNotEmpty || provider.bovedas.isNotEmpty;
+    String currentMonedaGasto = monedaGastoSeleccionada ?? provider.monedaLocal;
+    if (!provider.tasasCambio.containsKey(currentMonedaGasto)) currentMonedaGasto = provider.monedaLocal;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -178,9 +146,9 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                     children: [
                       Text(t('local_curr'), style: const TextStyle(fontWeight: FontWeight.bold)),
                       DropdownButton<String>(
-                        value: widget.monedaLocal,
-                        items: widget.tasasCambio.keys.map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
-                        onChanged: (val) { widget.onMonedaLocalChanged(val!); },
+                        value: provider.monedaLocal,
+                        items: provider.tasasCambio.keys.map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+                        onChanged: (val) { provider.setMonedaLocal(val!); },
                       )
                     ],
                   ),
@@ -193,13 +161,13 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
             children: [
               Expanded(
                 child: TextField(
-                  controller: widget.sueldoCtrl,
+                  controller: provider.sueldoCtrl,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: InputDecoration(labelText: t('base_salary'), border: const OutlineInputBorder()),
-                  onChanged: (_) => widget.onCalcular(),
+                  onChanged: (_) => provider.calcularPresupuesto(),
                 ),
               ),
-              IconButton(icon: const Icon(Icons.paste), color: Theme.of(context).colorScheme.primary, onPressed: () => widget.pegarNumeros(widget.sueldoCtrl, widget.onCalcular))
+              IconButton(icon: const Icon(Icons.paste), color: Theme.of(context).colorScheme.primary, onPressed: () => provider.pegarNumeros(provider.sueldoCtrl, provider.calcularPresupuesto))
             ],
           ),
           const SizedBox(height: 20),
@@ -219,24 +187,23 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                       });
                     }),
                     borderData: FlBorderData(show: false), sectionsSpace: 3, centerSpaceRadius: 65,
-                    sections: _generateChartSections(sueldo),
+                    sections: _generateChartSections(provider, sueldo, t),
                   )),
                   Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(t('net_balance'), style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                       Text(
-                        widget.numFormat.format(widget.balanceLocal),
-                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: widget.balanceLocal >= 0 ? Theme.of(context).colorScheme.primary : Colors.red),
+                        provider.numFormat.format(provider.balanceLocal),
+                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: provider.balanceLocal >= 0 ? Theme.of(context).colorScheme.primary : Colors.red),
                       ),
-                      Text(widget.monedaLocal, style: const TextStyle(fontSize: 10)),
-                      if (widget.monedaLocal != 'USD') ...[
+                      Text(provider.monedaLocal, style: const TextStyle(fontSize: 10)),
+                      if (provider.monedaLocal != 'USD') ...[
                         const SizedBox(height: 4),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          // CORRECCIÓN APLICADA AQUÍ: surfaceVariant en lugar de surfaceContainerHighest
                           decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceVariant, borderRadius: BorderRadius.circular(6)),
-                          child: Text("~ \$${widget.numFormat.format(widget.balanceEq)} USD", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                          child: Text("~ \$${provider.numFormat.format(provider.balanceEq)} USD", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                         )
                       ]
                     ],
@@ -249,19 +216,19 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(t('vaults'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
-              IconButton(icon: const Icon(Icons.add_box, color: Colors.amber), onPressed: () => _mostrarDialogoBoveda()),
+              IconButton(icon: const Icon(Icons.add_box, color: Colors.amber), onPressed: () => _mostrarDialogoBoveda(provider, t)),
             ],
           ),
-          if (widget.bovedas.isNotEmpty)
+          if (provider.bovedas.isNotEmpty)
             SizedBox(
               height: 140,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
-                itemCount: widget.bovedas.length,
+                itemCount: provider.bovedas.length,
                 itemBuilder: (context, index) {
-                  var b = widget.bovedas[index];
-                  double ahorradoEnUsd = b['ahorrado_local'] / (widget.tasasCambio[widget.monedaLocal] ?? 1.0);
-                  double ahorradoEnDivisaObjetivo = ahorradoEnUsd * (widget.tasasCambio[b['moneda_objetivo']] ?? 1.0);
+                  var b = provider.bovedas[index];
+                  double ahorradoEnUsd = b['ahorrado_local'] / (provider.tasasCambio[provider.monedaLocal] ?? 1.0);
+                  double ahorradoEnDivisaObjetivo = ahorradoEnUsd * (provider.tasasCambio[b['moneda_objetivo']] ?? 1.0);
                   double progreso = (ahorradoEnDivisaObjetivo / b['monto_objetivo']).clamp(0.0, 1.0);
 
                   return Container(
@@ -278,7 +245,7 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                               children: [
                                 Expanded(child: Text(b['nombre'], style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
                                 GestureDetector(
-                                  onTap: () => widget.onBovedaDeleted(b['id']),
+                                  onTap: () => provider.deleteBoveda(b['id']),
                                   child: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
                                 )
                               ],
@@ -286,17 +253,17 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                             const SizedBox(height: 8),
                             LinearProgressIndicator(value: progreso, backgroundColor: Colors.black12, color: Colors.amber),
                             const SizedBox(height: 4),
-                            Text("${(progreso * 100).toStringAsFixed(1)}% de ${widget.numFormat.format(b['monto_objetivo'])} ${b['moneda_objetivo']}", style: const TextStyle(fontSize: 10)),
+                            Text("${(progreso * 100).toStringAsFixed(1)}% de ${provider.numFormat.format(b['monto_objetivo'])} ${b['moneda_objetivo']}", style: const TextStyle(fontSize: 10)),
                             const Spacer(),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text("${widget.numFormat.format(b['ahorrado_local'])} ${widget.monedaLocal}", style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
+                                Text("${provider.numFormat.format(b['ahorrado_local'])} ${provider.monedaLocal}", style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
                                 Row(
                                   children: [
-                                    GestureDetector(onTap: () => _mostrarDialogoBoveda(id: b['id'], esAporte: false), child: const Icon(Icons.remove_circle, color: Colors.redAccent, size: 24)),
+                                    GestureDetector(onTap: () => _mostrarDialogoBoveda(provider, t, id: b['id'], esAporte: false), child: const Icon(Icons.remove_circle, color: Colors.redAccent, size: 24)),
                                     const SizedBox(width: 4),
-                                    GestureDetector(onTap: () => _mostrarDialogoBoveda(id: b['id'], esAporte: true), child: const Icon(Icons.add_circle, color: Colors.green, size: 24)),
+                                    GestureDetector(onTap: () => _mostrarDialogoBoveda(provider, t, id: b['id'], esAporte: true), child: const Icon(Icons.add_circle, color: Colors.green, size: 24)),
                                   ],
                                 )
                               ],
@@ -322,7 +289,7 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
-                      children: widget.categoriesConfig.map((cat) {
+                      children: categoriesConfig.map((cat) {
                         bool isSelected = categoriaSeleccionada == cat['id'];
                         return GestureDetector(
                           onTap: () => setState(() => categoriaSeleccionada = cat['id']),
@@ -348,9 +315,9 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Expanded(flex: 3, child: TextField(controller: widget.nombreGastoCtrl, decoration: InputDecoration(hintText: t('name'), border: const UnderlineInputBorder()))),
+                      Expanded(flex: 3, child: TextField(controller: provider.nombreGastoCtrl, decoration: InputDecoration(hintText: t('name'), border: const UnderlineInputBorder()))),
                       const SizedBox(width: 8),
-                      Expanded(flex: 3, child: TextField(controller: widget.montoGastoCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(hintText: t('amount'), border: const UnderlineInputBorder()))),
+                      Expanded(flex: 3, child: TextField(controller: provider.montoGastoCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(hintText: t('amount'), border: const UnderlineInputBorder()))),
                       const SizedBox(width: 8),
                       Expanded(
                         flex: 2,
@@ -358,7 +325,7 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                           value: currentMonedaGasto,
                           decoration: const InputDecoration(border: UnderlineInputBorder(), contentPadding: EdgeInsets.zero),
                           style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurface),
-                          items: widget.tasasCambio.keys.map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+                          items: provider.tasasCambio.keys.map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
                           onChanged: (val) => setState(() => monedaGastoSeleccionada = val),
                         )
                       ),
@@ -366,10 +333,10 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                         icon: const Icon(Icons.add_circle, size: 36),
                         color: Theme.of(context).colorScheme.primary,
                         onPressed: () {
-                          String nombre = widget.nombreGastoCtrl.text.trim();
-                          double? monto = double.tryParse(widget.montoGastoCtrl.text.trim());
+                          String nombre = provider.nombreGastoCtrl.text.trim();
+                          double? monto = double.tryParse(provider.montoGastoCtrl.text.trim());
                           if (nombre.isNotEmpty && monto != null && monto > 0) {
-                            widget.onGastoAdded({
+                            provider.addGasto({
                               'id': DateTime.now().millisecondsSinceEpoch.toString(),
                               'nombre': nombre,
                               'monto_original': monto,
@@ -377,7 +344,7 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                               'monto': monto,
                               'categoria': categoriaSeleccionada
                             });
-                            widget.nombreGastoCtrl.clear(); widget.montoGastoCtrl.clear();
+                            provider.nombreGastoCtrl.clear(); provider.montoGastoCtrl.clear();
                           }
                         },
                       )
@@ -388,11 +355,11 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
             ),
           ),
           const SizedBox(height: 12),
-          ...widget.gastos.map((gasto) {
-            final catConfig = widget.categoriesConfig.firstWhere((c) => c['id'] == gasto['categoria'], orElse: () => widget.categoriesConfig.last);
+          ...provider.gastos.map((gasto) {
+            final catConfig = categoriesConfig.firstWhere((c) => c['id'] == gasto['categoria'], orElse: () => categoriesConfig.last);
             double montoOriginal = (gasto['monto_original'] ?? gasto['monto'] as num).toDouble();
-            String monedaOrig = gasto['moneda_original'] ?? widget.monedaLocal;
-            bool esExtranjero = monedaOrig != widget.monedaLocal;
+            String monedaOrig = gasto['moneda_original'] ?? provider.monedaLocal;
+            bool esExtranjero = monedaOrig != provider.monedaLocal;
 
             return Dismissible(
               key: Key(gasto['id']),
@@ -403,7 +370,7 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                 alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20),
                 child: const Icon(Icons.delete, color: Colors.white),
               ),
-              onDismissed: (direction) { widget.onGastoDeleted(gasto['id']); HapticFeedback.mediumImpact(); },
+              onDismissed: (direction) { provider.deleteGasto(gasto['id']); HapticFeedback.mediumImpact(); },
               child: Card(
                 margin: const EdgeInsets.symmetric(vertical: 4),
                 color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3), elevation: 0,
@@ -414,8 +381,8 @@ class _PresupuestoTabState extends State<PresupuestoTab> {
                   trailing: Column(
                     mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text("${widget.numFormat.format(montoOriginal)} $monedaOrig", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                      if (esExtranjero) Text("~ ${widget.numFormat.format(gasto['monto'])} ${widget.monedaLocal}", style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                      Text("${provider.numFormat.format(montoOriginal)} $monedaOrig", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      if (esExtranjero) Text("~ ${provider.numFormat.format(gasto['monto'])} ${provider.monedaLocal}", style: const TextStyle(fontSize: 11, color: Colors.grey)),
                     ],
                   ),
                 ),
