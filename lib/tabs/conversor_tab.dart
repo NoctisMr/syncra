@@ -2,45 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:provider/provider.dart';
 import '../translations.dart';
+import '../providers/syncra_provider.dart';
 
 class ConversorTab extends StatefulWidget {
-  final String currentLang;
-  final Map<String, double> tasasCambio;
-  final NumberFormat numFormat;
-  final TextEditingController convMontoCtrl;
-  final String monedaDe;
-  final String monedaA;
-  final double resultadoConversion;
-  final int ultimaActualizacionEpoch;
-  final bool applySpread;
-  final TextEditingController spreadCtrl;
-  final Function(String, String) onMonedasChanged;
-  final VoidCallback onCalcular;
-  final Function(bool) onSpreadToggle;
-  final Function(double, String) onProcessCart;
-  final Future<void> Function(TextEditingController, VoidCallback) pegarNumeros;
-  final Future<void> Function(String) copiarResultado;
-
-  const ConversorTab({
-    super.key,
-    required this.currentLang,
-    required this.tasasCambio,
-    required this.numFormat,
-    required this.convMontoCtrl,
-    required this.monedaDe,
-    required this.monedaA,
-    required this.resultadoConversion,
-    required this.ultimaActualizacionEpoch,
-    required this.applySpread,
-    required this.spreadCtrl,
-    required this.onMonedasChanged,
-    required this.onCalcular,
-    required this.onSpreadToggle,
-    required this.onProcessCart,
-    required this.pegarNumeros,
-    required this.copiarResultado,
-  });
+  const ConversorTab({super.key});
 
   @override
   State<ConversorTab> createState() => _ConversorTabState();
@@ -51,9 +18,7 @@ class _ConversorTabState extends State<ConversorTab> {
   double _carritoTotal = 0.0;
   bool _isScanning = false;
 
-  String t(String key) => i18n[widget.currentLang]?[key] ?? key;
-
-  Future<void> _escanearPrecio() async {
+  Future<void> _escanearPrecio(SyncraProvider provider, String t(String key)) async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.camera);
 
@@ -82,7 +47,7 @@ class _ConversorTabState extends State<ConversorTab> {
 
         if (preciosEncontrados.isNotEmpty) {
           double mayorPrecio = preciosEncontrados.reduce((curr, next) => curr > next ? curr : next);
-          _mostrarConfirmacionEscaneo(mayorPrecio);
+          if (mounted) _mostrarConfirmacionEscaneo(mayorPrecio, provider);
         } else {
           if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('no_price_found'))));
         }
@@ -93,20 +58,20 @@ class _ConversorTabState extends State<ConversorTab> {
     }
   }
 
-  void _mostrarConfirmacionEscaneo(double precioDetectado) {
+  void _mostrarConfirmacionEscaneo(double precioDetectado, SyncraProvider provider) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Precio Detectado'),
-        content: Text("Se detectó el valor: ${widget.numFormat.format(precioDetectado)} ${widget.monedaDe}\n¿Sumar al carrito?"),
+        content: Text("Se detectó el valor: ${provider.numFormat.format(precioDetectado)} ${provider.monedaDe}\n¿Sumar al carrito?"),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
           FilledButton(
             onPressed: () {
               setState(() {
                 _carritoTotal += precioDetectado;
-                widget.convMontoCtrl.text = _carritoTotal.toStringAsFixed(2);
-                widget.onCalcular();
+                provider.convMontoCtrl.text = _carritoTotal.toStringAsFixed(2);
+                provider.calcularConversion();
               });
               Navigator.pop(context);
             },
@@ -117,7 +82,7 @@ class _ConversorTabState extends State<ConversorTab> {
     );
   }
 
-  void _enrutarCarrito() {
+  void _enrutarCarrito(SyncraProvider provider, String t(String key)) {
     showModalBottomSheet(
       context: context,
       builder: (context) {
@@ -133,7 +98,8 @@ class _ConversorTabState extends State<ConversorTab> {
                 title: Text(t('physical')),
                 onTap: () {
                   Navigator.pop(context);
-                  widget.onProcessCart(_carritoTotal, 'Fisica');
+                  provider.montoGastoCtrl.text = _carritoTotal.toStringAsFixed(2);
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Añade un nombre y confirma el gasto en la pestaña de Presupuesto')));
                   setState(() => _carritoTotal = 0.0);
                 },
               ),
@@ -142,7 +108,9 @@ class _ConversorTabState extends State<ConversorTab> {
                 title: Text(t('shipping_type')),
                 onTap: () {
                   Navigator.pop(context);
-                  widget.onProcessCart(_carritoTotal, 'Envio');
+                  provider.precioEnvioCtrl.text = _carritoTotal.toStringAsFixed(2);
+                  provider.updateEnvioParams(mOrigen: provider.monedaDe);
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Valor actualizado en la pestaña de Envíos. Ve allí para calcular aduanas.')));
                   setState(() => _carritoTotal = 0.0);
                 },
               )
@@ -155,9 +123,12 @@ class _ConversorTabState extends State<ConversorTab> {
 
   @override
   Widget build(BuildContext context) {
-    double formulaTasa = (widget.tasasCambio[widget.monedaA] ?? 1.0) / (widget.tasasCambio[widget.monedaDe] ?? 1.0);
-    bool isOutdated = widget.ultimaActualizacionEpoch > 0 && (DateTime.now().millisecondsSinceEpoch - widget.ultimaActualizacionEpoch > 86400000);
-    String formattedDate = widget.ultimaActualizacionEpoch == 0 ? "---" : DateFormat('dd/MM/yyyy HH:mm').format(DateTime.fromMillisecondsSinceEpoch(widget.ultimaActualizacionEpoch));
+    final provider = context.watch<SyncraProvider>();
+    String t(String key) => i18n[provider.language]?[key] ?? key;
+
+    double formulaTasa = (provider.tasasCambio[provider.monedaA] ?? 1.0) / (provider.tasasCambio[provider.monedaDe] ?? 1.0);
+    bool isOutdated = provider.ultimaActualizacionEpoch > 0 && (DateTime.now().millisecondsSinceEpoch - provider.ultimaActualizacionEpoch > 86400000);
+    String formattedDate = provider.ultimaActualizacionEpoch == 0 ? "---" : DateFormat('dd/MM/yyyy HH:mm').format(DateTime.fromMillisecondsSinceEpoch(provider.ultimaActualizacionEpoch));
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -195,7 +166,7 @@ class _ConversorTabState extends State<ConversorTab> {
                     children: [
                       Text(t('quick_conv'), style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
                       FilledButton.icon(
-                        onPressed: _isScanning ? null : _escanearPrecio,
+                        onPressed: _isScanning ? null : () => _escanearPrecio(provider, t),
                         icon: _isScanning ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.camera_alt),
                         label: Text(t('scan_price')),
                         style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.tertiary),
@@ -207,28 +178,43 @@ class _ConversorTabState extends State<ConversorTab> {
                     children: [
                       Expanded(
                         child: TextField(
-                          controller: widget.convMontoCtrl,
+                          controller: provider.convMontoCtrl,
                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           decoration: InputDecoration(labelText: t('amount_to_convert'), border: const OutlineInputBorder()),
                           onChanged: (_) {
-                            widget.onCalcular();
-                            setState(() => _carritoTotal = double.tryParse(widget.convMontoCtrl.text) ?? 0.0);
+                            provider.calcularConversion();
+                            setState(() => _carritoTotal = double.tryParse(provider.convMontoCtrl.text) ?? 0.0);
                           }
                         ),
                       ),
-                      IconButton(icon: const Icon(Icons.paste), color: Theme.of(context).colorScheme.primary, onPressed: () => widget.pegarNumeros(widget.convMontoCtrl, widget.onCalcular))
+                      IconButton(icon: const Icon(Icons.paste), color: Theme.of(context).colorScheme.primary, onPressed: () => provider.pegarNumeros(provider.convMontoCtrl, provider.calcularConversion))
                     ],
                   ),
                   const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      DropdownButton<String>(value: widget.monedaDe, items: widget.tasasCambio.keys.map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(), onChanged: (val) { widget.onMonedasChanged(val!, widget.monedaA); }),
+                      DropdownButton<String>(
+                        value: provider.monedaDe, 
+                        items: provider.tasasCambio.keys.map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(), 
+                        onChanged: (val) { provider.setMonedasConversor(val!, provider.monedaA); }
+                      ),
                       AnimatedRotation(
                         turns: _rotationAngle, duration: const Duration(milliseconds: 300),
-                        child: IconButton(icon: const Icon(Icons.swap_horiz, size: 36), color: Theme.of(context).colorScheme.primary, onPressed: () { setState(() { _rotationAngle += 0.5; widget.onMonedasChanged(widget.monedaA, widget.monedaDe); }); }),
+                        child: IconButton(
+                          icon: const Icon(Icons.swap_horiz, size: 36), 
+                          color: Theme.of(context).colorScheme.primary, 
+                          onPressed: () { 
+                            setState(() => _rotationAngle += 0.5); 
+                            provider.setMonedasConversor(provider.monedaA, provider.monedaDe); 
+                          }
+                        ),
                       ),
-                      DropdownButton<String>(value: widget.monedaA, items: widget.tasasCambio.keys.map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(), onChanged: (val) { widget.onMonedasChanged(widget.monedaDe, val!); })
+                      DropdownButton<String>(
+                        value: provider.monedaA, 
+                        items: provider.tasasCambio.keys.map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(), 
+                        onChanged: (val) { provider.setMonedasConversor(provider.monedaDe, val!); }
+                      )
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -237,10 +223,18 @@ class _ConversorTabState extends State<ConversorTab> {
                     decoration: BoxDecoration(border: Border.all(color: Theme.of(context).colorScheme.outlineVariant), borderRadius: BorderRadius.circular(8)),
                     child: Row(
                       children: [
-                        Checkbox(value: widget.applySpread, onChanged: (val) => widget.onSpreadToggle(val ?? false)),
+                        Checkbox(value: provider.applySpread, onChanged: (val) => provider.toggleSpread(val ?? false)),
                         Text(t('apply_fee'), style: const TextStyle(fontSize: 12)),
                         const SizedBox(width: 12),
-                        Expanded(child: TextField(controller: widget.spreadCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), enabled: widget.applySpread, decoration: InputDecoration(labelText: t('bank_fee'), border: InputBorder.none), onChanged: (_) => widget.onCalcular()))
+                        Expanded(
+                          child: TextField(
+                            controller: provider.spreadCtrl, 
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true), 
+                            enabled: provider.applySpread, 
+                            decoration: InputDecoration(labelText: t('bank_fee'), border: InputBorder.none), 
+                            onChanged: (_) => provider.calcularConversion()
+                          )
+                        )
                       ],
                     ),
                   ),
@@ -249,7 +243,7 @@ class _ConversorTabState extends State<ConversorTab> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceVariant, borderRadius: BorderRadius.circular(8)),
-                      child: Text("1 ${widget.monedaDe} = ${formulaTasa.toStringAsFixed(4)} ${widget.monedaA}", style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                      child: Text("1 ${provider.monedaDe} = ${formulaTasa.toStringAsFixed(4)} ${provider.monedaA}", style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -259,18 +253,18 @@ class _ConversorTabState extends State<ConversorTab> {
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 300),
                         transitionBuilder: (Widget child, Animation<double> animation) => ScaleTransition(scale: animation, child: child),
-                        child: Text("${widget.numFormat.format(widget.resultadoConversion)} ${widget.monedaA}", key: ValueKey<double>(widget.resultadoConversion), style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
+                        child: Text("${provider.numFormat.format(provider.resultadoConversion)} ${provider.monedaA}", key: ValueKey<double>(provider.resultadoConversion), style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
                       ),
-                      IconButton(icon: const Icon(Icons.copy), color: Theme.of(context).colorScheme.primary, onPressed: () => widget.copiarResultado(widget.resultadoConversion.toStringAsFixed(2)))
+                      IconButton(icon: const Icon(Icons.copy), color: Theme.of(context).colorScheme.primary, onPressed: () => provider.copiarResultado(provider.resultadoConversion.toStringAsFixed(2), context))
                     ],
                   ),
                   if (_carritoTotal > 0)
                     Padding(
                       padding: const EdgeInsets.only(top: 16.0),
                       child: FilledButton.tonalIcon(
-                        onPressed: _enrutarCarrito,
+                        onPressed: () => _enrutarCarrito(provider, t),
                         icon: const Icon(Icons.shopping_cart_checkout),
-                        label: Text("${t('process_cart')} (${widget.monedaDe})"),
+                        label: Text("${t('process_cart')} (${provider.monedaDe})"),
                       ),
                     )
                 ],
