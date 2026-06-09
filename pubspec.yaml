@@ -1,7 +1,7 @@
 name: syncra
 description: Gestión de presupuesto, conversor de divisas y seguimiento de envíos.
 publish_to: 'none'
-version: 1.4.0+2
+version: 1.4.1+3
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
