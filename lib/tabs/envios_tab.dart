@@ -1,73 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../translations.dart';
+import '../providers/syncra_provider.dart';
 
-class EnviosTab extends StatefulWidget {
-  final String currentLang;
-  final Map<String, double> tasasCambio;
-  final NumberFormat numFormat;
-  final TextEditingController precioEnvioCtrl;
-  final TextEditingController pesoEnvioCtrl;
-  final TextEditingController proxyCostoCtrl;
-  final String monedaProxy;
-  final String origenEnvio;
-  final String destinoEnvio;
-  final String monedaOrigenEnvio;
-  final String monedaDestinoEnvio;
-  final String desgloseEnvio;
-  final double totalEnvio;
-  
-  final bool applySpread;
-  final TextEditingController spreadCtrl;
-  final List<Map<String, dynamic>> cotizaciones;
-  final Function(bool) onSpreadToggle;
-  final VoidCallback onGuardarCotizacion;
-  final Function(String) onEliminarCotizacion;
-
-  final Function({
-    String? monedaProxy,
-    String? origenEnvio,
-    String? destinoEnvio,
-    String? monedaOrigenEnvio,
-    String? monedaDestinoEnvio,
-  }) onParametrosChanged;
-  final Future<void> Function(String) copiarResultado;
-
-  const EnviosTab({
-    super.key,
-    required this.currentLang,
-    required this.tasasCambio,
-    required this.numFormat,
-    required this.precioEnvioCtrl,
-    required this.pesoEnvioCtrl,
-    required this.proxyCostoCtrl,
-    required this.monedaProxy,
-    required this.origenEnvio,
-    required this.destinoEnvio,
-    required this.monedaOrigenEnvio,
-    required this.monedaDestinoEnvio,
-    required this.desgloseEnvio,
-    required this.totalEnvio,
-    required this.applySpread,
-    required this.spreadCtrl,
-    required this.cotizaciones,
-    required this.onSpreadToggle,
-    required this.onGuardarCotizacion,
-    required this.onEliminarCotizacion,
-    required this.onParametrosChanged,
-    required this.copiarResultado,
-  });
-
-  @override
-  State<EnviosTab> createState() => _EnviosTabState();
-}
-
-class _EnviosTabState extends State<EnviosTab> {
-  String t(String key) => i18n[widget.currentLang]?[key] ?? key;
+class EnviosTab extends StatelessWidget {
+  const EnviosTab({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<SyncraProvider>();
+    String t(String key) => i18n[provider.language]?[key] ?? key;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -84,37 +28,84 @@ class _EnviosTabState extends State<EnviosTab> {
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      Expanded(flex: 4, child: TextField(controller: widget.precioEnvioCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t('price'), border: const OutlineInputBorder()), onChanged: (_) => widget.onParametrosChanged())),
+                      Expanded(
+                        flex: 4, 
+                        child: TextField(
+                          controller: provider.precioEnvioCtrl, 
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true), 
+                          decoration: InputDecoration(labelText: t('price'), border: const OutlineInputBorder()), 
+                          onChanged: (_) => provider.calcularEnvio()
+                        )
+                      ),
                       const SizedBox(width: 8),
-                      Expanded(flex: 3, child: DropdownButtonFormField<String>(isExpanded: true, value: widget.monedaOrigenEnvio, decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10)), items: widget.tasasCambio.keys.map((String val) => DropdownMenuItem(value: val, child: Text(val))).toList(), onChanged: (val) { widget.onParametrosChanged(monedaOrigenEnvio: val!); })),
+                      Expanded(
+                        flex: 3, 
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true, 
+                          value: provider.monedaOrigenEnvio, 
+                          decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10)), 
+                          items: provider.tasasCambio.keys.map((String val) => DropdownMenuItem(value: val, child: Text(val))).toList(), 
+                          onChanged: (val) { provider.updateEnvioParams(mOrigen: val!); }
+                        )
+                      ),
                       const SizedBox(width: 8),
-                      Expanded(flex: 4, child: TextField(controller: widget.pesoEnvioCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t('weight'), border: const OutlineInputBorder()), onChanged: (_) => widget.onParametrosChanged())),
+                      Expanded(
+                        flex: 4, 
+                        child: TextField(
+                          controller: provider.pesoEnvioCtrl, 
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true), 
+                          decoration: InputDecoration(labelText: t('weight'), border: const OutlineInputBorder()), 
+                          onChanged: (_) => provider.calcularEnvio()
+                        )
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
-                    isExpanded: true, value: widget.origenEnvio, decoration: InputDecoration(labelText: t('origin')),
+                    isExpanded: true, value: provider.origenEnvio, decoration: InputDecoration(labelText: t('origin')),
                     items: ['Japón', 'China', 'EE.UU.', 'Europa', 'Nacional'].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
-                    onChanged: (val) { widget.onParametrosChanged(origenEnvio: val!); },
+                    onChanged: (val) { provider.updateEnvioParams(origen: val!); },
                   ),
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      Expanded(flex: 2, child: TextField(controller: widget.proxyCostoCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: t('proxy_cost'), border: const UnderlineInputBorder()), onChanged: (_) => widget.onParametrosChanged())),
+                      Expanded(
+                        flex: 2, 
+                        child: TextField(
+                          controller: provider.proxyCostoCtrl, 
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true), 
+                          decoration: InputDecoration(labelText: t('proxy_cost'), border: const UnderlineInputBorder()), 
+                          onChanged: (_) => provider.calcularEnvio()
+                        )
+                      ),
                       const SizedBox(width: 16),
-                      Expanded(flex: 1, child: DropdownButton<String>(isExpanded: true, value: widget.monedaProxy, items: widget.tasasCambio.keys.map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(), onChanged: (val) { widget.onParametrosChanged(monedaProxy: val!); })),
+                      Expanded(
+                        flex: 1, 
+                        child: DropdownButton<String>(
+                          isExpanded: true, 
+                          value: provider.monedaProxy, 
+                          items: provider.tasasCambio.keys.map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(), 
+                          onChanged: (val) { provider.updateEnvioParams(mProxy: val!); }
+                        )
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      Expanded(child: DropdownButtonFormField<String>(
-                        isExpanded: true, value: widget.destinoEnvio, decoration: InputDecoration(labelText: t('destination')),
-                        items: ['Brasil', 'Perú', 'México', 'EE.UU.', 'Europa', 'Japón', 'Venezuela', 'Otros'].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
-                        onChanged: (val) { widget.onParametrosChanged(destinoEnvio: val!); },
-                      )),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true, value: provider.destinoEnvio, decoration: InputDecoration(labelText: t('destination')),
+                          items: ['Brasil', 'Perú', 'México', 'EE.UU.', 'Europa', 'Japón', 'Venezuela', 'Otros'].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+                          onChanged: (val) { provider.updateEnvioParams(destino: val!); },
+                        )
+                      ),
                       const SizedBox(width: 12),
-                      DropdownButton<String>(value: widget.monedaDestinoEnvio, items: widget.tasasCambio.keys.map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(), onChanged: (val) { widget.onParametrosChanged(monedaDestinoEnvio: val!); }),
+                      DropdownButton<String>(
+                        value: provider.monedaDestinoEnvio, 
+                        items: provider.tasasCambio.keys.map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(), 
+                        onChanged: (val) { provider.updateEnvioParams(mDestino: val!); }
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -129,18 +120,18 @@ class _EnviosTabState extends State<EnviosTab> {
                     child: Row(
                       children: [
                         Checkbox(
-                          value: widget.applySpread,
-                          onChanged: (val) => widget.onSpreadToggle(val ?? false),
+                          value: provider.applySpread,
+                          onChanged: (val) => provider.toggleSpread(val ?? false),
                         ),
                         Text(t('apply_fee'), style: const TextStyle(fontSize: 12)),
                         const SizedBox(width: 12),
                         Expanded(
                           child: TextField(
-                            controller: widget.spreadCtrl,
+                            controller: provider.spreadCtrl,
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            enabled: widget.applySpread,
+                            enabled: provider.applySpread,
                             decoration: InputDecoration(labelText: t('bank_fee'), border: InputBorder.none),
-                            onChanged: (_) => widget.onParametrosChanged(),
+                            onChanged: (_) => provider.calcularEnvio(),
                           ),
                         )
                       ],
@@ -148,20 +139,26 @@ class _EnviosTabState extends State<EnviosTab> {
                   ),
                   const SizedBox(height: 16),
 
-                  Text(widget.desgloseEnvio, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                  Text(provider.desgloseEnvio, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 12)),
                   const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Flexible(child: Text("${widget.numFormat.format(widget.totalEnvio)} ${widget.monedaDestinoEnvio}", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary), overflow: TextOverflow.ellipsis)),
-                      IconButton(icon: const Icon(Icons.copy), color: Theme.of(context).colorScheme.primary, onPressed: () => widget.copiarResultado(widget.totalEnvio.toStringAsFixed(2)))
+                      Flexible(
+                        child: Text(
+                          "${provider.numFormat.format(provider.totalEnvio)} ${provider.monedaDestinoEnvio}", 
+                          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary), 
+                          overflow: TextOverflow.ellipsis
+                        )
+                      ),
+                      IconButton(icon: const Icon(Icons.copy), color: Theme.of(context).colorScheme.primary, onPressed: () => provider.copiarResultado(provider.totalEnvio.toStringAsFixed(2), context))
                     ],
                   ),
-                  if (widget.totalEnvio > 0)
+                  if (provider.totalEnvio > 0)
                     Padding(
                       padding: const EdgeInsets.only(top: 8.0),
                       child: FilledButton.tonalIcon(
-                        onPressed: widget.onGuardarCotizacion,
+                        onPressed: provider.guardarCotizacion,
                         icon: const Icon(Icons.bookmark_add),
                         label: Text(t('save_quote')),
                       ),
@@ -172,11 +169,11 @@ class _EnviosTabState extends State<EnviosTab> {
           ),
 
           // LISTA DE COTIZACIONES GUARDADAS
-          if (widget.cotizaciones.isNotEmpty) ...[
+          if (provider.cotizaciones.isNotEmpty) ...[
             const SizedBox(height: 24),
             Text(t('saved_quotes'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey)),
             const SizedBox(height: 8),
-            ...widget.cotizaciones.map((cot) {
+            ...provider.cotizaciones.map((cot) {
               return Dismissible(
                 key: Key(cot['id']),
                 direction: DismissDirection.endToStart,
@@ -188,7 +185,7 @@ class _EnviosTabState extends State<EnviosTab> {
                   child: const Icon(Icons.delete, color: Colors.white),
                 ),
                 onDismissed: (_) {
-                  widget.onEliminarCotizacion(cot['id']);
+                  provider.eliminarCotizacion(cot['id']);
                   HapticFeedback.mediumImpact();
                 },
                 child: Card(
@@ -199,7 +196,7 @@ class _EnviosTabState extends State<EnviosTab> {
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     title: Text("${cot['origen']} ➔ ${cot['destino']}", style: const TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: Text("${cot['fecha']} • Peso: ${cot['peso']}kg"),
-                    trailing: Text("${widget.numFormat.format(cot['total'])} ${cot['moneda']}", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).colorScheme.primary)),
+                    trailing: Text("${provider.numFormat.format(cot['total'])} ${cot['moneda']}", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Theme.of(context).colorScheme.primary)),
                   ),
                 ),
               );
