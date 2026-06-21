@@ -1,8 +1,6 @@
 // Archivo: lib/features/budget/budget_calculator_view.dart
 import 'package:flutter/material.dart';
-
-// TODO: Ajustar la importación según el nombre real de tu proyecto en el pubspec
-// import 'package:syncra_app/core/utils/math_helpers.dart';
+import 'package:syncra_app/core/utils/math_helpers.dart';
 
 class BudgetCalculatorView extends StatefulWidget {
   const BudgetCalculatorView({super.key});
@@ -30,11 +28,7 @@ class _BudgetCalculatorViewState extends State<BudgetCalculatorView> {
       final shippingCost = double.tryParse(_shippingController.text) ?? 0.0;
 
       setState(() {
-        // TODO: Integrar con MathHelpers.calculatePercentage en la fase final
-        // _calculatedTax = MathHelpers.calculatePercentage(basePrice, taxPercentage);
-        
-        // Cálculo local temporal para simular el desglose en la UI
-        _calculatedTax = (basePrice * taxPercentage) / 100;
+        _calculatedTax = MathHelpers.calculatePercentage(basePrice, taxPercentage);
         _totalBudget = basePrice + _calculatedTax + shippingCost;
       });
     }
