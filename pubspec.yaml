@@ -12,6 +12,7 @@ dependencies:
   
   # UI y Diseño
   cupertino_icons: ^1.0.6
+  provider: ^6.1.2 # <-- AGREGADO: Esencial para la gestión de estados en tus vistas
   
   # Base de Datos y Almacenamiento Local (Hive)
   hive: ^2.2.3
@@ -44,15 +45,4 @@ dev_dependencies:
   # Generadores de código para la Base de Datos Hive
   build_runner: ^2.4.8
   hive_generator: ^2.0.1
-
-flutter:
-  uses-material-design: true
-  assets:
-    - assets/icons/
-
-# Configuración del paquete automatizado para tus íconos
-flutter_launcher_icons:
-  android: "launcher_icon"
-  ios: false
-  image_path: "assets/icons/logo.png"
-  min_sdk_android: 21
+  
