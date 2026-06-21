@@ -1,8 +1,6 @@
 // Archivo: lib/features/shipping/volumetric_calculator.dart
 import 'package:flutter/material.dart';
-
-// TODO: Descomentar y ajustar la importación al nombre real de tu proyecto al configurar el pubspec
-// import 'package:syncra_app/core/utils/math_helpers.dart';
+import 'package:syncra_app/core/utils/math_helpers.dart';
 
 class VolumetricCalculatorView extends StatefulWidget {
   const VolumetricCalculatorView({super.key});
@@ -29,18 +27,12 @@ class _VolumetricCalculatorViewState extends State<VolumetricCalculatorView> {
       final width = double.tryParse(_widthController.text) ?? 0.0;
       final height = double.tryParse(_heightController.text) ?? 0.0;
 
-      // TODO: Implementación real usando MathHelpers (Descomentar en la fase final)
-      // setState(() {
-      //   _estimatedWeight = MathHelpers.calculateVolumetricWeight(
-      //     length: length,
-      //     width: width,
-      //     height: height,
-      //   );
-      // });
-      
-      // Simulación temporal de la fórmula IATA (Divisor 5000) para visualizar el resultado en la UI
       setState(() {
-        _estimatedWeight = (length * width * height) / 5000.0;
+        _estimatedWeight = MathHelpers.calculateVolumetricWeight(
+          length: length,
+          width: width,
+          height: height,
+        );
       });
     }
   }
