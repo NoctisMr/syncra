@@ -1,9 +1,7 @@
 // Archivo: lib/features/ocr/ocr_scanner_view.dart
 import 'package:flutter/material.dart';
-
-// TODO: Descomentar estas importaciones en la fase final
-// import 'package:image_picker/image_picker.dart';
-// import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 
 class OcrScannerView extends StatefulWidget {
   const OcrScannerView({super.key});
@@ -16,30 +14,25 @@ class _OcrScannerViewState extends State<OcrScannerView> {
   String _extractedText = '';
   bool _isProcessing = false;
 
-  // TODO: Instanciar dependencias en la fase final
-  // final ImagePicker _picker = ImagePicker();
-  // final TextRecognizer _textRecognizer = TextRecognizer();
+  final ImagePicker _picker = ImagePicker();
+  final TextRecognizer _textRecognizer = TextRecognizer();
 
   /// Procesa la imagen seleccionada y extrae el texto
-  Future<void> _processImage(/* ImageSource source */) async {
+  Future<void> _processImage(ImageSource source) async {
     setState(() {
       _isProcessing = true;
       _extractedText = '';
     });
 
     try {
-      // TODO: Lógica real a implementar tras el pubspec.yaml
-      // final XFile? image = await _picker.pickImage(source: source);
-      // if (image == null) return;
-      // final inputImage = InputImage.fromFilePath(image.path);
-      // final RecognizedText recognizedText = await _textRecognizer.processImage(inputImage);
-      // setState(() => _extractedText = recognizedText.text);
-
-      // Simulación temporal para visualizar el comportamiento de la UI
-      await Future.delayed(const Duration(seconds: 2));
-      setState(() {
-        _extractedText = 'Texto simulado extraído exitosamente de la imagen.\nListo para integrarse con ML Kit.';
-      });
+      final XFile? image = await _picker.pickImage(source: source);
+      if (image == null) {
+        setState(() => _isProcessing = false);
+        return;
+      }
+      final inputImage = InputImage.fromFilePath(image.path);
+      final RecognizedText recognizedText = await _textRecognizer.processImage(inputImage);
+      setState(() => _extractedText = recognizedText.text);
     } catch (e) {
       debugPrint('Error durante el escaneo OCR: $e');
       setState(() {
@@ -81,7 +74,7 @@ class _OcrScannerViewState extends State<OcrScannerView> {
                       label: 'Cámara',
                       onTap: () {
                         Navigator.pop(context);
-                        _processImage(); // TODO: Pasar ImageSource.camera
+                        _processImage(ImageSource.camera); 
                       },
                     ),
                     _SourceOption(
@@ -89,7 +82,7 @@ class _OcrScannerViewState extends State<OcrScannerView> {
                       label: 'Galería',
                       onTap: () {
                         Navigator.pop(context);
-                        _processImage(); // TODO: Pasar ImageSource.gallery
+                        _processImage(ImageSource.gallery); 
                       },
                     ),
                   ],
