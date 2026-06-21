@@ -1,0 +1,60 @@
+name: syncra_app
+description: "Aplicación premium de envíos, OCR y finanzas."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # UI y Diseño
+  cupertino_icons: ^1.0.6
+  
+  # Base de Datos y Almacenamiento Local (Hive)
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  shared_preferences: ^2.2.3
+  
+  # Funciones Premium (Respaldos y Archivos)
+  file_picker: ^6.1.1
+  path_provider: ^2.1.2
+  
+  # Servicios, API y Conectividad
+  http: ^1.2.0
+  connectivity_plus: ^6.0.3
+  
+  # Utilidades y Formato
+  intl: ^0.19.0
+  
+  # OCR Avanzado y Cámara
+  image_picker: ^1.0.7
+  google_mlkit_text_recognition: ^0.12.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+  
+  # Generador de íconos nativos automáticos para iOS y Android
+  flutter_launcher_icons: ^0.13.1
+  
+  # Generadores de código para la Base de Datos Hive
+  build_runner: ^2.4.8
+  hive_generator: ^2.0.1
+
+flutter:
+  uses-material-design: true
+  # TODO: Descomentar esto cuando subas tu logo a la carpeta
+  # assets:
+  #   - assets/icons/
+
+# Configuración del paquete automatizado para tus íconos
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icons/logo.png"
+  min_sdk_android: 21
+  
