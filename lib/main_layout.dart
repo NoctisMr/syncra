@@ -1,11 +1,10 @@
-// Archivo: lib/main_layout.dart
 import 'package:flutter/material.dart';
 
-// Importaciones de tus vistas reales
-import 'package:syncra_app/features/ocr/ocr_scanner_view.dart';
-import 'package:syncra_app/features/shipping/volumetric_calculator.dart';
-import 'package:syncra_app/features/conversion/currency_converter_view.dart';
-import 'package:syncra_app/features/backup/cloud_sync_service.dart';
+// Rutas directas para evitar errores de compilación
+import 'ocr_scanner_view.dart';
+import 'volumetric_calculator.dart';
+import 'currency_converter_view.dart';
+import 'cloud_sync_service.dart';
 
 class MainLayout extends StatefulWidget {
   const MainLayout({Key? key}) : super(key: key);
@@ -17,7 +16,6 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   int _currentIndex = 0;
 
-  // Reemplazamos los placeholders por tus vistas 100% funcionales
   final List<Widget> _screens = [
     const OcrScannerView(),
     const VolumetricCalculatorView(),
