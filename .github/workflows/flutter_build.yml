@@ -40,8 +40,8 @@ jobs:
         run: dart run build_runner build --delete-conflicting-outputs
 
       # 6. Aplica los íconos de la app configurados en el pubspec
-      - name: 🎨 Generar íconos nativos
-        run: dart run flutter_launcher_icons
+     # - name: 🎨 Generar íconos nativos
+       # run: dart run flutter_launcher_icons
 
       # 7. Analiza el código en busca de errores sintácticos antes de compilar
       - name: 🔍 Analizar código
