@@ -1,13 +1,16 @@
+// Archivo: lib/main.dart
 import 'package:flutter/material.dart';
 
-// Rutas directas para estructura plana
-import 'local_storage.dart';
-import 'app_theme.dart';
-import 'main_layout.dart';
+// Rutas exactas basadas en tu estructura
+import 'package:syncra_app/core/database/local_storage.dart';
+import 'package:syncra_app/core/theme/app_theme.dart';
+import 'package:syncra_app/ui/layouts/main_layout.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
   await LocalStorageService.instance.initDatabase();
+  
   runApp(const SyncraApp());
 }
 
