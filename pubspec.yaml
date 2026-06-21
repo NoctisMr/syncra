@@ -1,41 +1,54 @@
-name: syncra_app
-description: "Aplicación premium de envíos, OCR y finanzas."
-publish_to: 'none'
-version: 1.0.0+1
+name: Syncra App Build (CI/CD)
 
-environment:
-  sdk: '>=3.2.0 <4.0.0'
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
 
-dependencies:
-  flutter:
-    sdk: flutter
-  
-  cupertino_icons: ^1.0.6
-  provider: ^6.1.2 
-  hive: ^2.2.3
-  hive_flutter: ^1.1.0
-  shared_preferences: ^2.2.3
-  
+jobs:
+  build-android:
+    name: Compilar APK Android
+    runs-on: ubuntu-latest
 
-  file_picker: ^8.0.3
-  
-  path_provider: ^2.1.2
-  http: ^1.2.0
-  connectivity_plus: ^6.0.3
-  intl: ^0.19.0
-  image_picker: ^1.0.7
-  google_mlkit_text_recognition: ^0.12.0
+    steps:
+      - name: 📚 Descargar repositorio
+        uses: actions/checkout@v4
 
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  flutter_lints: ^3.0.1
-  flutter_launcher_icons: ^0.13.1
-  
-  # ESTOS DOS ERAN LOS QUE FALTABAN PARA QUE NO FALLE LA COMPILACIÓN
-  build_runner: ^2.4.8
-  hive_generator: ^2.0.1
+      - name: ☕ Configurar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
 
-flutter:
-  uses-material-design: true
-  
+      - name: 🐦 Configurar Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: 🪄 Generar archivos nativos (Android)
+        run: flutter create --platforms=android .
+
+      - name: 🔧 Ajustar SDKs y reglas ProGuard
+        run: |
+          find android -name "build.gradle" -exec sed -i 's/flutter.minSdkVersion/24/g' {} +
+          find android -name "build.gradle.kts" -exec sed -i 's/flutter\.minSdkVersion/24/g' {} +
+          find android -name "build.gradle" -exec sed -i 's/flutter.compileSdkVersion/36/g' {} +
+          find android -name "build.gradle.kts" -exec sed -i 's/flutter\.compileSdkVersion/36/g' {} +
+          echo "-dontwarn com.google.mlkit.**" > android/app/proguard-rules.pro
+
+      - name: 📦 Instalar dependencias
+        run: flutter pub get
+
+      - name: ⚙️ Ejecutar Build Runner
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: 🏗️ Compilar APK (Release)
+        run: flutter build apk --release
+
+      - name: 📤 Subir artefacto (APK)
+        uses: actions/upload-artifact@v4
+        with:
+          name: SyncraApp-Release
+          path: build/app/outputs/flutter-apk/app-release.apk
+          
