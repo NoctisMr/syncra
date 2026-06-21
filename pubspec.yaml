@@ -10,27 +10,16 @@ dependencies:
   flutter:
     sdk: flutter
   
-  # UI y Diseño
   cupertino_icons: ^1.0.6
-  provider: ^6.1.2 # <-- AGREGADO: Esencial para la gestión de estados en tus vistas
-  
-  # Base de Datos y Almacenamiento Local (Hive)
+  provider: ^6.1.2 
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   shared_preferences: ^2.2.3
-  
-  # Funciones Premium (Respaldos y Archivos)
   file_picker: ^6.1.1
   path_provider: ^2.1.2
-  
-  # Servicios, API y Conectividad
   http: ^1.2.0
   connectivity_plus: ^6.0.3
-  
-  # Utilidades y Formato
   intl: ^0.19.0
-  
-  # OCR Avanzado y Cámara
   image_picker: ^1.0.7
   google_mlkit_text_recognition: ^0.12.0
 
@@ -38,11 +27,11 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.1
-  
-  # Generador de íconos nativos automáticos para iOS y Android
   flutter_launcher_icons: ^0.13.1
   
-  # Generadores de código para la Base de Datos Hive
+  # ESTOS DOS ERAN LOS QUE FALTABAN PARA QUE NO FALLE LA COMPILACIÓN
   build_runner: ^2.4.8
   hive_generator: ^2.0.1
-  
+
+flutter:
+  uses-material-design: true
