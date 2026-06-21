@@ -3,7 +3,7 @@ name: Syncra App Build (CI/CD)
 on:
   push:
     branches: [ "main", "master" ]
-  workflow_dispatch: # Permite que actives la compilación con un botón manualmente
+  workflow_dispatch:
 
 jobs:
   build-android:
@@ -34,11 +34,6 @@ jobs:
           find android -name "build.gradle" -exec sed -i 's/flutter.minSdkVersion/24/g' {} +
           find android -name "build.gradle.kts" -exec sed -i 's/flutter\.minSdkVersion/24/g' {} +
 
-      - name: 🧹 Auto-Corregir Rutas de Importación (Magia para Celular)
-        run: |
-          find lib -type f -name "*.dart" -exec sed -i -E "s/import 'package:syncra_app\/.*\/([^\/]+\.dart)';/import '\1';/g" {} +
-          find lib -type f -name "*.dart" -exec sed -i -E "s/import '\.\.?\/.*\/([^\/]+\.dart)';/import '\1';/g" {} +
-
       - name: 📦 Instalar dependencias
         run: flutter pub get
 
@@ -53,4 +48,4 @@ jobs:
         with:
           name: SyncraApp-Release
           path: build/app/outputs/flutter-apk/app-release.apk
-        
+          
