@@ -3,8 +3,7 @@ name: Syncra App Build (CI/CD)
 on:
   push:
     branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
+  workflow_dispatch: # Permite que actives la compilación con un botón manualmente
 
 jobs:
   build-android:
@@ -27,35 +26,31 @@ jobs:
           channel: 'stable'
           cache: true
 
-      # 🪄 MAGIA PARA CELULARES: Crea la carpeta 'android' temporalmente en la nube
       - name: 🪄 Generar archivos nativos (Android)
         run: flutter create --platforms=android .
 
-      # 🔧 MAGIA PARA ML KIT: Cambia la versión de Android a 24 automáticamente sin abrir el archivo
       - name: 🔧 Ajustar minSdkVersion para OCR
-        run: sed -i 's/flutter.minSdkVersion/24/g' android/app/build.gradle
+        run: |
+          find android -name "build.gradle" -exec sed -i 's/flutter.minSdkVersion/24/g' {} +
+          find android -name "build.gradle.kts" -exec sed -i 's/flutter\.minSdkVersion/24/g' {} +
+
+      - name: 🧹 Auto-Corregir Rutas de Importación (Magia para Celular)
+        run: |
+          find lib -type f -name "*.dart" -exec sed -i -E "s/import 'package:syncra_app\/.*\/([^\/]+\.dart)';/import '\1';/g" {} +
+          find lib -type f -name "*.dart" -exec sed -i -E "s/import '\.\.?\/.*\/([^\/]+\.dart)';/import '\1';/g" {} +
 
       - name: 📦 Instalar dependencias
         run: flutter pub get
 
-      - name: ⚙️ Ejecutar Build Runner (Hive)
+      - name: ⚙️ Ejecutar Build Runner (Generar Base de Datos)
         run: dart run build_runner build --delete-conflicting-outputs
 
-      # Ignora fallos si no tienes el archivo del logo subido aún
-      - name: 🎨 Generar íconos nativos
-        run: dart run flutter_launcher_icons || echo "Aviso: Logo no encontrado, usando ícono por defecto."
-
-      # Analiza el código pero no cancela la compilación si hay advertencias (warnings)
-      - name: 🔍 Analizar código
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings || true
-
-      - name: 🏗️ Compilar APK
+      - name: 🏗️ Compilar APK (Release)
         run: flutter build apk --release
 
       - name: 📤 Subir artefacto (APK)
         uses: actions/upload-artifact@v4
         with:
-          name: syncra_app_android_apk
+          name: SyncraApp-Release
           path: build/app/outputs/flutter-apk/app-release.apk
-          retention-days: 7
-          
+        
