@@ -47,9 +47,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  # TODO: Descomentar esto cuando subas tu logo a la carpeta
-  # assets:
-  #   - assets/icons/
+  assets:
+    - assets/icons/
 
 # Configuración del paquete automatizado para tus íconos
 flutter_launcher_icons:
@@ -57,4 +56,3 @@ flutter_launcher_icons:
   ios: true
   image_path: "assets/icons/logo.png"
   min_sdk_android: 21
-  
