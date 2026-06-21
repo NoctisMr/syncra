@@ -1,12 +1,9 @@
 // Archivo: lib/features/backup/cloud_sync_service.dart
 import 'package:flutter/material.dart';
 import 'dart:io';
-
-// TODO: Ajustar la importación según el nombre real de tu proyecto en el pubspec
-// import 'package:syncra_app/core/database/local_storage.dart';
-// TODO: Descomentar en la fase final
-// import 'package:file_picker/file_picker.dart';
-// import 'package:path_provider/path_provider.dart';
+import 'package:syncra_app/core/database/local_storage.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
 
 class CloudSyncView extends StatefulWidget {
   const CloudSyncView({super.key});
@@ -22,17 +19,10 @@ class _CloudSyncViewState extends State<CloudSyncView> {
   Future<void> _exportData() async {
     setState(() => _isLoading = true);
     try {
-      // TODO: Descomentar al integrar LocalStorageService
-      // final jsonString = LocalStorageService.instance.exportDatabaseToJson();
-      final String jsonString = '{"simulated_data": "Este es un respaldo de prueba"}';
-
-      // TODO: Descomentar implementación real con path_provider
-      // final directory = await getApplicationDocumentsDirectory();
-      // final file = File('${directory.path}/syncra_backup.json');
-      // await file.writeAsString(jsonString);
-      
-      // Simulación visual
-      await Future.delayed(const Duration(seconds: 2));
+      final jsonString = LocalStorageService.instance.exportDatabaseToJson();
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/syncra_backup.json');
+      await file.writeAsString(jsonString);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -59,37 +49,28 @@ class _CloudSyncViewState extends State<CloudSyncView> {
   Future<void> _importData() async {
     setState(() => _isLoading = true);
     try {
-      // TODO: Implementación real con file_picker (Descomentar en la fase final)
-      // FilePickerResult? result = await FilePicker.platform.pickFiles(
-      //   type: FileType.custom,
-      //   allowedExtensions: ['json'],
-      // );
-      
-      // if (result != null && result.files.single.path != null) {
-      //   final file = File(result.files.single.path!);
-      //   final jsonString = await file.readAsString();
-      //   final success = await LocalStorageService.instance.importDatabaseFromJson(jsonString);
-      //   
-      //   if (!mounted) return;
-      //   if (success) {
-      //     ScaffoldMessenger.of(context).showSnackBar(
-      //       const SnackBar(content: Text('Datos restaurados correctamente.')),
-      //     );
-      //   } else {
-      //     throw Exception('El formato del archivo no es válido.');
-      //   }
-      // }
-      
-      // Simulación visual
-      await Future.delayed(const Duration(seconds: 2));
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Datos importados y restaurados (Simulación).'),
-          backgroundColor: Theme.of(context).colorScheme.primary,
-        ),
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
       );
-
+      
+      if (result != null && result.files.single.path != null) {
+        final file = File(result.files.single.path!);
+        final jsonString = await file.readAsString();
+        final success = await LocalStorageService.instance.importDatabaseFromJson(jsonString);
+        
+        if (!mounted) return;
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Datos restaurados correctamente.'),
+              backgroundColor: Theme.of(context).colorScheme.primary,
+            ),
+          );
+        } else {
+          throw Exception('El formato del archivo no es válido.');
+        }
+      }
     } catch (e) {
       debugPrint('Error al importar: $e');
       if (!mounted) return;
