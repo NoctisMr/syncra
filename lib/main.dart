@@ -1,16 +1,13 @@
-// Archivo: lib/main.dart
 import 'package:flutter/material.dart';
-import 'package:syncra_app/core/database/local_storage.dart';
-import 'package:syncra_app/app_theme.dart';
-import 'package:syncra_app/main_layout.dart';
+
+// Rutas directas para estructura plana
+import 'local_storage.dart';
+import 'app_theme.dart';
+import 'main_layout.dart';
 
 void main() async {
-  // Asegura que los bindings de Flutter estén listos antes de iniciar DBs o ML Kit
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Inicializamos Hive
   await LocalStorageService.instance.initDatabase();
-  
   runApp(const SyncraApp());
 }
 
