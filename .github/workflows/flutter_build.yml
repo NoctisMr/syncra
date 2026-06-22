@@ -27,59 +27,27 @@ jobs:
           cache: true
 
       - name: 📦 Instalar dependencias
-        run: flutter pub get
-
-      - name: 🪄 Preparar estructura Android
         run: |
-          # Creamos la estructura, pero luego vamos a sobrescribir los archivos críticos
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs
+
+      - name: 🛠️ Preparar configuración de Android
+        run: |
+          # 1. Crear estructura nativa si no existe
           flutter create --platforms=android .
           
-          # Creamos un archivo gradle.properties estable
+          # 2. Inyectar local.properties para que Gradle encuentre el SDK y Flutter
+          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+          echo "flutter.sdk=$FLUTTER_ROOT" >> android/local.properties
+          
+          # 3. Crear un archivo gradle.properties optimizado
           echo "android.useAndroidX=true" > android/gradle.properties
           echo "android.enableJetifier=true" >> android/gradle.properties
-          echo "org.gradle.jvmargs=-Xmx2048m" >> android/gradle.properties
 
-      - name: 🛡️ Inyectar configuración inamovible (SDK 36 + ProGuard)
-        run: |
-          # Crear reglas ProGuard para que R8 no toque nada de ML Kit
-          echo "-keep class com.google.mlkit.** { *; }" > android/app/proguard-rules.pro
-          echo "-dontwarn com.google.mlkit.**" >> android/app/proguard-rules.pro
-
-          # Sobrescribir build.gradle para asegurar SDK 36
-          cat <<EOF > android/app/build.gradle
-          def localProperties = new Properties()
-          def localPropertiesFile = rootProject.file('local.properties')
-          if (localPropertiesFile.exists()) {
-              localPropertiesFile.withReader('UTF-8') { reader -> localProperties.load(reader) }
-          }
-
-          apply plugin: 'com.android.application'
-          apply plugin: 'kotlin-android'
-          apply from: "\$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
-
-          android {
-              compileSdkVersion 36
-              defaultConfig {
-                  applicationId "com.example.syncra"
-                  minSdkVersion 24
-                  targetSdkVersion 36
-                  versionCode 1
-                  versionName "1.0"
-              }
-              buildTypes {
-                  release {
-                      minifyEnabled false
-                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-                  }
-              }
-          }
-          dependencies {
-              implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.0"
-          }
-          EOF
-
-      - name: 🏗️ Compilar APK Release
-        run: flutter build apk --release --no-shrink
+      - name: 🏗️ Compilar APK
+        # Usamos el comando directo de Flutter sin --no-shrink primero.
+        # Si esto falla, el --no-shrink es opcional, pero probemos la forma estándar.
+        run: flutter build apk --release
 
       - name: 📤 Subir artefacto (APK)
         uses: actions/upload-artifact@v4
