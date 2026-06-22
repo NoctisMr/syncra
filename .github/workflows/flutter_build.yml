@@ -26,11 +26,21 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: 🪄 Generar archivos nativos (Android)
-        run: flutter create --platforms=android .
+      - name: 🪄 Generar archivos nativos (Android) — solo si falta
+        run: |
+          if [ ! -d android ]; then
+            flutter create --platforms=android .
+          else
+            echo "La carpeta android/ ya existe — omitiendo flutter create"
+          fi
 
       - name: 📦 Instalar dependencias
         run: flutter pub get
+
+      - name: ⚙️ Ejecutar Build Runner
+        run: |
+          rm -rf .dart_tool
+          flutter pub run build_runner build --delete-conflicting-outputs
 
       - name: 🛡️ Configurar reglas de ProGuard (Bypass errores R8 de ML Kit)
         run: |
@@ -43,32 +53,38 @@ jobs:
           -dontwarn com.google.mlkit.vision.text.**
           EOF
 
-      - name: 🔧 Forzar SDK 36 en la App y todos los Plugins
+      - name: 🔧 Forzar SDK 36 en la App y todos los Plugins (seguro)
         run: |
-          echo "flutter.compileSdkVersion=36" >> android/local.properties
-          echo "flutter.minSdkVersion=24" >> android/local.properties
-          
-          cat << 'EOF' >> android/build.gradle
-
-          subprojects {
-              afterEvaluate { project ->
-                  if (project.hasProperty('android')) {
-                      project.android {
-                          compileSdkVersion 36
-                      }
-                  }
-              }
-          }
+          mkdir -p android
+          cat >> android/gradle.properties <<'EOF'
+          flutter.compileSdkVersion=36
+          flutter.minSdkVersion=24
           EOF
+          
+          # Reemplaza de forma segura la línea de compileSdkVersion en cualquier submódulo
+          find android -name build.gradle -print0 | \
+            xargs -0 -n1 sed -i -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 36/g' || true
+          
+          echo "Archivos build.gradle modificados:"
+          git --no-pager diff -- android || true
 
-      - name: ⚙️ Ejecutar Build Runner
-        run: |
-          rm -rf .dart_tool
-          flutter pub run build_runner build --delete-conflicting-outputs
+          # Nota: Si tu proyecto usa variables en lugar de números directos para la versión,
+          # revisa los logs de este paso para confirmar los cambios.
 
       - name: 🏗️ Compilar APK (Release Limpio)
-        # Eliminamos el flag inválido y dejamos la compilación estándar universal
-        run: flutter build apk --release
+        run: |
+          set -e
+          flutter clean
+          flutter pub get
+          flutter build apk --release --split-per-abi
+
+      - name: 📦 Mostrar artefactos generados (debug)
+        if: always()
+        run: |
+          echo "Listando salidas de compilación:"
+          ls -la build/app/outputs/flutter-apk || true
+          echo "Buscando archivos APK recursivamente:"
+          find build -type f -name '*.apk' -print || true
 
       - name: 📤 Subir artefacto (APK)
         uses: actions/upload-artifact@v4
