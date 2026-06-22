@@ -67,11 +67,12 @@ jobs:
           flutter pub run build_runner build --delete-conflicting-outputs
 
       - name: 🏗️ Compilar APK (Release Limpio)
-        run: flutter build apk --release --no-split-per-abi
+        # Eliminamos el flag inválido y dejamos la compilación estándar universal
+        run: flutter build apk --release
 
       - name: 📤 Subir artefacto (APK)
         uses: actions/upload-artifact@v4
         with:
           name: SyncraApp-Release
-          path: build/app/outputs/**/*.apk
+          path: build/app/outputs/flutter-apk/*.apk
           
