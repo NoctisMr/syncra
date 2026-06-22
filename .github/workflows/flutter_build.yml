@@ -26,25 +26,30 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: 🪄 Generar archivos nativos
+      - name: 🪄 Generar archivos nativos (Android)
         run: flutter create --platforms=android .
 
-      - name: 🔧 Forzar SDKs en local.properties
-        run: |
-          echo "flutter.minSdkVersion=24" >> android/local.properties
-          echo "flutter.compileSdkVersion=36" >> android/local.properties
-          echo "flutter.targetSdkVersion=36" >> android/local.properties
-
       - name: 📦 Instalar dependencias
+        # Es vital que esto ocurra ANTES del parcheo
         run: flutter pub get
+
+      - name: 🔧 Parchear SDKs de plugins a la fuerza
+        run: |
+          # 1. Configurar la aplicación principal
+          echo "flutter.compileSdkVersion=36" >> android/local.properties
+          echo "flutter.minSdkVersion=24" >> android/local.properties
+          
+          # 2. Rastrear la caché del servidor y obligar a todos los plugins a usar el SDK 36
+          find ~/.pub-cache -type f -name "build.gradle" -exec sed -i -E 's/(compileSdk|compileSdkVersion)[ ]*(=)?[ ]*[0-9]+/\1 36/g' {} + || true
 
       - name: ⚙️ Ejecutar Build Runner
         run: dart run build_runner build --delete-conflicting-outputs
 
-      - name: 🏗️ Compilar APK (Release)
-        run: flutter build apk --release
+      - name: 🏗️ Compilar APK (Bypass R8)
+        # La bandera --no-shrink evita que Android elimine las clases de ML Kit
+        run: flutter build apk --release --no-shrink
 
-      - name: 📤 Subir artefacto
+      - name: 📤 Subir artefacto (APK)
         uses: actions/upload-artifact@v4
         with:
           name: SyncraApp-Release
