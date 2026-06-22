@@ -14,16 +14,10 @@ jobs:
       - name: 📚 Descargar repositorio
         uses: actions/checkout@v4
 
-      - name: 🧹 Limpiar caché de Gradle y compilaciones previas
-        run: |
-          rm -rf ~/.gradle/caches
-          rm -rf ~/.gradle/wrapper
-          rm -rf build/
-
       - name: ☕ Configurar Java 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: 'temurin'
           java-version: '17'
 
       - name: 🐦 Configurar Flutter
@@ -32,125 +26,55 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: 🪄 Generar archivos nativos (Android)
+      - name: 🪄 Generar archivos nativos (Android) - Solo si falta
         run: |
           if [ ! -d android ]; then
             flutter create --platforms=android .
           else
-            echo "La carpeta android/ ya existe — omitiendo flutter create"
+            echo "La carpeta android/ ya existe. Omitiendo flutter create."
           fi
 
       - name: 📦 Instalar dependencias
         run: flutter pub get
 
-      - name: ⚙️ Ejecutar Build Runner
-        run: |
-          rm -rf .dart_tool
-          flutter pub run build_runner build --delete-conflicting-outputs
+      - name: ⚙️ Generar código de base de datos (Hive)
+        run: flutter pub run build_runner build --delete-conflicting-outputs
 
-      - name: 🛡️ Configurar reglas de ProGuard
+      - name: 🛡️ Configurar reglas de ProGuard para ML Kit
         run: |
           mkdir -p android/app
-          cat << 'EOF' > android/app/proguard-rules.pro
-          -dontwarn com.google.mlkit.vision.text.chinese.**
-          -dontwarn com.google.mlkit.vision.text.japanese.**
-          -dontwarn com.google.mlkit.vision.text.korean.**
-          -dontwarn com.google.mlkit.vision.text.devanagari.**
-          -dontwarn com.google.mlkit.vision.text.**
-          EOF
+          echo "-dontwarn com.google.mlkit.vision.text.**" > android/app/proguard-rules.pro
+          echo "-dontwarn com.google.android.gms.**" >> android/app/proguard-rules.pro
 
-      - name: 📝 Sobreescribir build.gradle de la App
+      - name: 🔧 Configurar SDK de Android (Estable y Seguro)
         run: |
-          cat << 'EOF' > android/app/build.gradle
-          def localProperties = new Properties()
-          def localPropertiesFile = rootProject.file('local.properties')
-          if (localPropertiesFile.exists()) {
-              localPropertiesFile.withReader('UTF-8') { reader ->
-                  localProperties.load(reader)
-              }
-          }
-
-          def flutterRoot = localProperties.getProperty('flutter.sdk')
-          if (flutterRoot == null) {
-              throw new GradleException("Flutter SDK not found. Define location with flutter.sdk in the local.properties file.")
-          }
-
-          def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
-          if (flutterVersionCode == null) {
-              flutterVersionCode = '1'
-          }
-
-          def flutterVersionName = localProperties.getProperty('flutter.versionName')
-          if (flutterVersionName == null) {
-              flutterVersionName = '1.0'
-          }
-
-          apply plugin: 'com.android.application'
-          apply plugin: 'kotlin-android'
-          apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
-
-          android {
-              namespace "com.example.syncra_app"
-              compileSdkVersion 36
-
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_11
-                  targetCompatibility JavaVersion.VERSION_11
-              }
-
-              kotlinOptions {
-                  jvmTarget = '11'
-              }
-
-              sourceSets {
-                  main.java.srcDirs += 'src/main/kotlin'
-              }
-
-              defaultConfig {
-                  applicationId "com.example.syncra_app"
-                  minSdkVersion 24
-                  targetSdkVersion 36
-                  versionCode flutterVersionCode.toInteger()
-                  versionName flutterVersionName
-              }
-
-              buildTypes {
-                  release {
-                      signingConfig signingConfigs.debug
-                      minifyEnabled true
-                      shrinkResources true
-                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-                  }
-              }
-          }
-
-          flutter {
-              source '../..'
-          }
-
-          dependencies {
-              implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.10"
-          }
-          EOF
+          mkdir -p android
+          echo "flutter.compileSdkVersion=34" >> android/local.properties
+          echo "flutter.minSdkVersion=24" >> android/local.properties
+          echo "flutter.targetSdkVersion=34" >> android/local.properties
+          
+          echo "flutter.compileSdkVersion=34" >> android/gradle.properties
+          echo "flutter.minSdkVersion=24" >> android/gradle.properties
+          echo "flutter.targetSdkVersion=34" >> android/gradle.properties
+          
+          find android -name "build.gradle" -exec sed -i 's/compileSdkVersion [0-9]*/compileSdkVersion 34/g' {} \; || true
+          find android -name "build.gradle" -exec sed -i 's/targetSdkVersion [0-9]*/targetSdkVersion 34/g' {} \; || true
+          find android -name "build.gradle" -exec sed -i 's/minSdkVersion [0-9]*/minSdkVersion 24/g' {} \; || true
 
       - name: 🏗️ Compilar APK Release
         run: |
-          set -e
           flutter clean
           flutter pub get
-          flutter build apk --release --split-per-abi -vv
+          flutter build apk --release
 
-      - name: 📦 Mostrar artefactos
+      - name: 📦 Verificar APKs generados
         if: always()
         run: |
-          echo "Listando salidas de compilación:"
-          ls -la build/app/outputs/flutter-apk || true
-          echo "Buscando archivos APK:"
-          find build -type f -name '*.apk' -print || true
+          echo "Buscando archivos APK resultantes..."
+          find build/app/outputs/ -type f -name '*.apk' || echo "No se encontraron APKs"
 
-      - name: 📤 Subir artefacto
+      - name: 📤 Subir artefacto (APK)
         uses: actions/upload-artifact@v4
-        if: success()
         with:
           name: SyncraApp-Release
           path: build/app/outputs/flutter-apk/*.apk
