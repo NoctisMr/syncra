@@ -26,9 +26,6 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: 🪄 Generar archivos nativos (Android)
-        run: flutter create --platforms=android .
-
       - name: 📦 Instalar dependencias
         run: flutter pub get
 
@@ -43,32 +40,24 @@ jobs:
           -dontwarn com.google.mlkit.vision.text.**
           EOF
 
-      - name: 🔧 Forzar SDK 36 en la App y todos los Plugins
+      - name: 🔧 Forzar SDK 36 de forma segura
         run: |
-          echo "flutter.compileSdkVersion=36" >> android/local.properties
-          echo "flutter.minSdkVersion=24" >> android/local.properties
+          # Añadir propiedades a gradle.properties
+          echo "flutter.compileSdkVersion=36" >> android/gradle.properties
+          echo "flutter.minSdkVersion=24" >> android/gradle.properties
           
-          cat << 'EOF' >> android/build.gradle
-
-          subprojects {
-              afterEvaluate { project ->
-                  if (project.hasProperty('android')) {
-                      project.android {
-                          compileSdkVersion 36
-                      }
-                  }
-              }
-          }
-          EOF
+          # Reemplazar versiones de compilación en los build.gradle de manera segura
+          find android -name "build.gradle" -print0 | xargs -0 -n1 sed -i -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 36/g' || true
 
       - name: ⚙️ Ejecutar Build Runner
         run: |
           rm -rf .dart_tool
           flutter pub run build_runner build --delete-conflicting-outputs
 
-      - name: 🏗️ Compilar APK (Release Limpio)
-        # Eliminamos el flag inválido y dejamos la compilación estándar universal
-        run: flutter build apk --release
+      - name: 🏗️ Compilar APK (Release)
+        run: |
+          flutter clean
+          flutter build apk --release --split-per-abi --verbose
 
       - name: 📤 Subir artefacto (APK)
         uses: actions/upload-artifact@v4
