@@ -26,24 +26,25 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: 🪄 Generar archivos nativos (Android)
+      - name: 🪄 Generar archivos nativos
         run: flutter create --platforms=android .
 
-      - name: 🔧 Ajustar minSdkVersion para OCR
+      - name: 🔧 Forzar SDKs en local.properties
         run: |
-          find android -name "build.gradle" -exec sed -i 's/flutter.minSdkVersion/24/g' {} +
-          find android -name "build.gradle.kts" -exec sed -i 's/flutter\.minSdkVersion/24/g' {} +
+          echo "flutter.minSdkVersion=24" >> android/local.properties
+          echo "flutter.compileSdkVersion=36" >> android/local.properties
+          echo "flutter.targetSdkVersion=36" >> android/local.properties
 
       - name: 📦 Instalar dependencias
         run: flutter pub get
 
-      - name: ⚙️ Ejecutar Build Runner (Generar Base de Datos)
+      - name: ⚙️ Ejecutar Build Runner
         run: dart run build_runner build --delete-conflicting-outputs
 
       - name: 🏗️ Compilar APK (Release)
         run: flutter build apk --release
 
-      - name: 📤 Subir artefacto (APK)
+      - name: 📤 Subir artefacto
         uses: actions/upload-artifact@v4
         with:
           name: SyncraApp-Release
