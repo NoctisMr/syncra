@@ -26,55 +26,33 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: 🪄 Generar archivos nativos (Android) - Solo si falta
+      - name: 🪄 Generar carpeta Android nativa
         run: |
           if [ ! -d android ]; then
             flutter create --platforms=android .
           else
-            echo "La carpeta android/ ya existe. Omitiendo flutter create."
+            echo "La carpeta android/ ya existe."
           fi
 
       - name: 📦 Instalar dependencias
         run: flutter pub get
 
-      - name: ⚙️ Generar código de base de datos (Hive)
+      - name: ⚙️ Generar código de Hive
         run: flutter pub run build_runner build --delete-conflicting-outputs
 
-      - name: 🛡️ Configurar reglas de ProGuard para ML Kit
+      - name: 🔧 Configurar SDK para ML Kit de forma segura
         run: |
-          mkdir -p android/app
-          echo "-dontwarn com.google.mlkit.vision.text.**" > android/app/proguard-rules.pro
-          echo "-dontwarn com.google.android.gms.**" >> android/app/proguard-rules.pro
-
-      - name: 🔧 Configurar SDK de Android (Estable y Seguro)
-        run: |
-          mkdir -p android
-          echo "flutter.compileSdkVersion=34" >> android/local.properties
+          # Inyectamos la versión mínima requerida por ML Kit (24) sin romper Gradle
           echo "flutter.minSdkVersion=24" >> android/local.properties
+          echo "flutter.compileSdkVersion=34" >> android/local.properties
           echo "flutter.targetSdkVersion=34" >> android/local.properties
-          
-          echo "flutter.compileSdkVersion=34" >> android/gradle.properties
-          echo "flutter.minSdkVersion=24" >> android/gradle.properties
-          echo "flutter.targetSdkVersion=34" >> android/gradle.properties
-          
-          find android -name "build.gradle" -exec sed -i 's/compileSdkVersion [0-9]*/compileSdkVersion 34/g' {} \; || true
-          find android -name "build.gradle" -exec sed -i 's/targetSdkVersion [0-9]*/targetSdkVersion 34/g' {} \; || true
-          find android -name "build.gradle" -exec sed -i 's/minSdkVersion [0-9]*/minSdkVersion 24/g' {} \; || true
 
       - name: 🏗️ Compilar APK Release
-        run: |
-          flutter clean
-          flutter pub get
-          flutter build apk --release
-
-      - name: 📦 Verificar APKs generados
-        if: always()
-        run: |
-          echo "Buscando archivos APK resultantes..."
-          find build/app/outputs/ -type f -name '*.apk' || echo "No se encontraron APKs"
+        run: flutter build apk --release
 
       - name: 📤 Subir artefacto (APK)
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: SyncraApp-Release
           path: build/app/outputs/flutter-apk/*.apk
