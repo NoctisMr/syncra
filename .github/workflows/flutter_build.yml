@@ -30,24 +30,46 @@ jobs:
         run: flutter create --platforms=android .
 
       - name: 📦 Instalar dependencias
-        # Es vital que esto ocurra ANTES del parcheo
         run: flutter pub get
 
-      - name: 🔧 Parchear SDKs de plugins a la fuerza
+      - name: 🛡️ Configurar reglas de ProGuard (Bypass errores R8 de ML Kit)
+        # Esto crea automáticamente el archivo de reglas ProGuard que pide R8
         run: |
-          # 1. Configurar la aplicación principal
+          mkdir -p android/app
+          cat << 'EOF' > android/app/proguard-rules.pro
+          # Ignorar advertencias de clases ausentes de ML Kit (Idiomas asiáticos que no usamos)
+          -dontwarn com.google.mlkit.vision.text.chinese.**
+          -dontwarn com.google.mlkit.vision.text.japanese.**
+          -dontwarn com.google.mlkit.vision.text.korean.**
+          -dontwarn com.google.mlkit.vision.text.devanagari.**
+          -dontwarn com.google.mlkit.vision.text.**
+          EOF
+
+      - name: 🔧 Forzar SDK 36 en la App y todos los Plugins
+        # Resolvemos el conflicto de versiones de Android exigiendo el SDK 36 globalmente
+        run: |
           echo "flutter.compileSdkVersion=36" >> android/local.properties
           echo "flutter.minSdkVersion=24" >> android/local.properties
           
-          # 2. Rastrear la caché del servidor y obligar a todos los plugins a usar el SDK 36
-          find ~/.pub-cache -type f -name "build.gradle" -exec sed -i -E 's/(compileSdk|compileSdkVersion)[ ]*(=)?[ ]*[0-9]+/\1 36/g' {} + || true
+          cat << 'EOF' >> android/build.gradle
+
+          subprojects {
+              afterEvaluate { project ->
+                  if (project.hasProperty('android')) {
+                      project.android {
+                          compileSdkVersion 36
+                      }
+                  }
+              }
+          }
+          EOF
 
       - name: ⚙️ Ejecutar Build Runner
         run: dart run build_runner build --delete-conflicting-outputs
 
-      - name: 🏗️ Compilar APK (Bypass R8)
-        # La bandera --no-shrink evita que Android elimine las clases de ML Kit
-        run: flutter build apk --release --no-shrink
+      - name: 🏗️ Compilar APK (Release Limpio)
+        # Ejecutamos la compilación estándar ya protegida por las reglas ProGuard anteriores
+        run: flutter build apk --release
 
       - name: 📤 Subir artefacto (APK)
         uses: actions/upload-artifact@v4
