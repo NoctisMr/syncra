@@ -1,4 +1,4 @@
-name: Syncra App Build (CI/CD)
+name: Syncra
 
 on:
   push:
