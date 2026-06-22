@@ -40,15 +40,15 @@ jobs:
       - name: ⚙️ Generar código de Hive
         run: flutter pub run build_runner build --delete-conflicting-outputs
 
-      - name: 🔧 Configurar SDK para ML Kit de forma segura
+      - name: 🔧 Configurar SDK 36 (Requerido por dependencias)
         run: |
-          # Inyectamos la versión mínima requerida por ML Kit (24) sin romper Gradle
           echo "flutter.minSdkVersion=24" >> android/local.properties
-          echo "flutter.compileSdkVersion=34" >> android/local.properties
-          echo "flutter.targetSdkVersion=34" >> android/local.properties
+          echo "flutter.compileSdkVersion=36" >> android/local.properties
+          echo "flutter.targetSdkVersion=36" >> android/local.properties
 
-      - name: 🏗️ Compilar APK Release
-        run: flutter build apk --release
+      - name: 🏗️ Compilar APK Release (Bypass R8)
+        # La bandera --no-shrink evita el colapso de ML Kit saltándose la ofuscación
+        run: flutter build apk --release --no-shrink
 
       - name: 📤 Subir artefacto (APK)
         uses: actions/upload-artifact@v4
