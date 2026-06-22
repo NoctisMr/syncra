@@ -38,64 +38,44 @@ jobs:
       - name: ⚙️ Generar código de Hive
         run: flutter pub run build_runner build --delete-conflicting-outputs
 
-      - name: 📝 Forzar SDK en Propiedades
+      - name: 📝 Forzar SDK 36 en Propiedades
         run: |
           echo "flutter.minSdkVersion=24" >> android/local.properties
           echo "flutter.compileSdkVersion=36" >> android/local.properties
           echo "flutter.targetSdkVersion=36" >> android/local.properties
 
-      - name: 🛡️ Inyección Quirúrgica (Script Python)
+      - name: 🛡️ Inyección Inteligente (Kotlin / Groovy)
         run: |
           cat << 'EOF' > fix_gradle.py
           import os, re
 
-          # 1. Crear reglas para salvar ML Kit
+          # 1. Crear reglas para proteger ML Kit
           os.makedirs("android/app", exist_ok=True)
           with open("android/app/proguard-rules.pro", "w") as f:
               f.write("-keep class com.google.mlkit.** { *; }\n")
               f.write("-dontwarn com.google.mlkit.**\n")
-              f.write("-keep class com.google.android.gms.vision.** { *; }\n")
-              f.write("-dontwarn com.google.android.gms.vision.**\n")
 
-          # 2. Apagar R8 asegurando sintaxis perfecta
-          path = "android/app/build.gradle"
-          if os.path.exists(path):
-              with open(path, "r") as f:
-                  content = f.read()
-              content = re.sub(
-                  r"release\s*\{",
-                  "release {\n            minifyEnabled false\n            shrinkResources false\n            proguardFiles getDefaultProguardFile(\"proguard-android-optimize.txt\"), \"proguard-rules.pro\"",
-                  content
-              )
-              with open(path, "w") as f:
-                  f.write(content)
+          # 2. Desactivar R8 adaptándose al lenguaje (KTS o Groovy)
+          kts = "android/app/build.gradle.kts"
+          groovy = "android/app/build.gradle"
 
-          # 3. Forzar SDK 36 en plugins rebeldes como file_picker
-          root_path = "android/build.gradle"
-          if os.path.exists(root_path):
-              with open(root_path, "a") as f:
-                  f.write("\nsubprojects {\n    afterEvaluate { project ->\n        if (project.hasProperty(\"android\")) {\n            project.android {\n                compileSdkVersion 36\n            }\n        }\n    }\n}\n")
+          if os.path.exists(kts):
+              with open(kts, "r") as f: text = f.read()
+              text = re.sub(r"release\s*\{", "release {\n            isMinifyEnabled = false\n            isShrinkResources = false\n", text)
+              with open(kts, "w") as f: f.write(text)
+          elif os.path.exists(groovy):
+              with open(groovy, "r") as f: text = f.read()
+              text = re.sub(r"release\s*\{", "release {\n            minifyEnabled false\n            shrinkResources false\n", text)
+              with open(groovy, "w") as f: f.write(text)
           EOF
           python3 fix_gradle.py
 
       - name: 🏗️ Compilar APK Release
-        # continue-on-error evita que GitHub cancele el trabajo si Flutter se asusta al no hallar el APK
-        continue-on-error: true
         run: flutter build apk --release
-
-      - name: 📦 Rescatar APK generado
-        if: always()
-        run: |
-          mkdir -p output_apks
-          # Buscará exhaustivamente en todas las carpetas y extraerá el APK
-          find . -name "*.apk" -type f -exec cp {} output_apks/ \;
-          echo "✅ APKs rescatados y listos:"
-          ls -la output_apks/
 
       - name: 📤 Subir artefacto final (APK)
         uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: SyncraApp-Release
-          path: output_apks/*.apk
+          path: build/app/outputs/flutter-apk/*.apk
           
