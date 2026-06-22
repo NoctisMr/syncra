@@ -29,49 +29,57 @@ jobs:
       - name: 📦 Instalar dependencias
         run: flutter pub get
 
-      - name: 🪄 Generar carpeta Android nativa
+      - name: 🪄 Preparar estructura Android
         run: |
-          if [ ! -d android ]; then
-            flutter create --platforms=android .
-          fi
+          # Creamos la estructura, pero luego vamos a sobrescribir los archivos críticos
+          flutter create --platforms=android .
+          
+          # Creamos un archivo gradle.properties estable
+          echo "android.useAndroidX=true" > android/gradle.properties
+          echo "android.enableJetifier=true" >> android/gradle.properties
+          echo "org.gradle.jvmargs=-Xmx2048m" >> android/gradle.properties
 
-      - name: ⚙️ Generar código de Hive
-        run: dart run build_runner build --delete-conflicting-outputs
-
-      - name: 🛡️ Inyección Definitiva (SDK 36 + ProGuard R8)
+      - name: 🛡️ Inyectar configuración inamovible (SDK 36 + ProGuard)
         run: |
-          # 1. Crear archivo ProGuard para decirle a R8 que ignore las clases faltantes de ML Kit
-          cat <<EOF > android/app/proguard-rules.pro
-          -dontwarn com.google.mlkit.vision.text.**
-          -keep class com.google.mlkit.vision.text.** { *; }
+          # Crear reglas ProGuard para que R8 no toque nada de ML Kit
+          echo "-keep class com.google.mlkit.** { *; }" > android/app/proguard-rules.pro
+          echo "-dontwarn com.google.mlkit.**" >> android/app/proguard-rules.pro
+
+          # Sobrescribir build.gradle para asegurar SDK 36
+          cat <<EOF > android/app/build.gradle
+          def localProperties = new Properties()
+          def localPropertiesFile = rootProject.file('local.properties')
+          if (localPropertiesFile.exists()) {
+              localPropertiesFile.withReader('UTF-8') { reader -> localProperties.load(reader) }
+          }
+
+          apply plugin: 'com.android.application'
+          apply plugin: 'kotlin-android'
+          apply from: "\$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
+
+          android {
+              compileSdkVersion 36
+              defaultConfig {
+                  applicationId "com.example.syncra"
+                  minSdkVersion 24
+                  targetSdkVersion 36
+                  versionCode 1
+                  versionName "1.0"
+              }
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+                  }
+              }
+          }
+          dependencies {
+              implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.0"
+          }
           EOF
 
-          # 2. Forzar SDK 36 y SDK 24 en Kotlin DSL (El estándar actual de Flutter)
-          KTS_FILE="android/app/build.gradle.kts"
-          if [ -f "$KTS_FILE" ]; then
-            # Reemplazar variables dinámicas por números fijos de SDK
-            sed -i 's/flutter.compileSdkVersion/36/g' $KTS_FILE
-            sed -i 's/flutter.targetSdkVersion/36/g' $KTS_FILE
-            sed -i 's/flutter.minSdkVersion/24/g' $KTS_FILE
-            
-            # Vincular el archivo ProGuard al compilador
-            sed -i '/getByName("release") {/a \            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")' $KTS_FILE
-          fi
-
-          # 3. Forzar SDK 36 y SDK 24 en Groovy (Soporte heredado por seguridad)
-          GRADLE_FILE="android/app/build.gradle"
-          if [ -f "$GRADLE_FILE" ]; then
-            # Reemplazar variables dinámicas por números fijos de SDK
-            sed -i 's/flutter.compileSdkVersion/36/g' $GRADLE_FILE
-            sed -i 's/flutter.targetSdkVersion/36/g' $GRADLE_FILE
-            sed -i 's/flutter.minSdkVersion/24/g' $GRADLE_FILE
-            
-            # Vincular el archivo ProGuard al compilador
-            sed -i '/release {/a \            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"' $GRADLE_FILE
-          fi
-
       - name: 🏗️ Compilar APK Release
-        run: flutter build apk --release
+        run: flutter build apk --release --no-shrink
 
       - name: 📤 Subir artefacto (APK)
         uses: actions/upload-artifact@v4
