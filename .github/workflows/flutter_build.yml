@@ -38,34 +38,41 @@ jobs:
       - name: ⚙️ Generar código de Hive
         run: flutter pub run build_runner build --delete-conflicting-outputs
 
-      - name: 📝 Forzar SDK 36 en Propiedades
+      - name: 📝 Forzar SDK 36 en la App
         run: |
           echo "flutter.minSdkVersion=24" >> android/local.properties
           echo "flutter.compileSdkVersion=36" >> android/local.properties
           echo "flutter.targetSdkVersion=36" >> android/local.properties
 
-      - name: 🛡️ Inyección Inteligente (Kotlin / Groovy)
+      - name: 💥 Ataque a la Caché (Someter a file_picker a SDK 36)
+        run: |
+          # Buscamos en las entrañas de pub-cache y reescribimos el SDK de todos los plugins obligatoriamente
+          echo "Buscando y parcheando plugins rebeldes..."
+          find ~/.pub-cache/hosted/ -name "build.gradle" -type f -exec sed -i -E 's/compileSdk(Version)?[[:space:]]+[0-9]+/compileSdkVersion 36/g' {} + || true
+          find ~/.pub-cache/hosted/ -name "build.gradle.kts" -type f -exec sed -i -E 's/compileSdk(Version)?[[:space:]]*=[[:space:]]*[0-9]+/compileSdk = 36/g' {} + || true
+
+      - name: 🛡️ Inyección R8 (Apagar ML Kit Error)
         run: |
           cat << 'EOF' > fix_gradle.py
           import os, re
 
-          # 1. Crear reglas para proteger ML Kit
+          # 1. Reglas ProGuard
           os.makedirs("android/app", exist_ok=True)
           with open("android/app/proguard-rules.pro", "w") as f:
               f.write("-keep class com.google.mlkit.** { *; }\n")
               f.write("-dontwarn com.google.mlkit.**\n")
 
-          # 2. Desactivar R8 adaptándose al lenguaje (KTS o Groovy)
+          # 2. Apagar R8 adaptándose a Gradle moderno (KTS) o clásico (Groovy)
           kts = "android/app/build.gradle.kts"
           groovy = "android/app/build.gradle"
 
           if os.path.exists(kts):
               with open(kts, "r") as f: text = f.read()
-              text = re.sub(r"release\s*\{", "release {\n            isMinifyEnabled = false\n            isShrinkResources = false\n", text)
+              text = re.sub(r"release\s*\{", "release {\n            isMinifyEnabled = false\n            isShrinkResources = false\n            proguardFiles(getDefaultProguardFile(\"proguard-android-optimize.txt\"), \"proguard-rules.pro\")\n", text)
               with open(kts, "w") as f: f.write(text)
           elif os.path.exists(groovy):
               with open(groovy, "r") as f: text = f.read()
-              text = re.sub(r"release\s*\{", "release {\n            minifyEnabled false\n            shrinkResources false\n", text)
+              text = re.sub(r"release\s*\{", "release {\n            minifyEnabled false\n            shrinkResources false\n            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'\n", text)
               with open(groovy, "w") as f: f.write(text)
           EOF
           python3 fix_gradle.py
@@ -75,6 +82,7 @@ jobs:
 
       - name: 📤 Subir artefacto final (APK)
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: SyncraApp-Release
           path: build/app/outputs/flutter-apk/*.apk
