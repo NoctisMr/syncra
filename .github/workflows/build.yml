@@ -1,0 +1,62 @@
+name: Flutter CI/CD Build
+
+# Se ejecuta cada vez que haces un 'push' a la rama principal
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Clona tu código fuente (tu carpeta lib y pubspec)
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 2. Configura Java en el servidor
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      # 3. Instala Flutter en el servidor
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      # 4. LA MAGIA: Reconstruye la carpeta de Android faltante
+      - name: Generate Android Native Folders
+        run: flutter create . --platforms=android
+
+      # 5. INYECCIÓN AUTOMÁTICA: Modifica los archivos nativos sin que tú los toques
+      - name: Inject ML Kit & Camera Requirements
+        run: |
+          # Sube el minSdkVersion a 24 en el build.gradle usando sed
+          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 24/g' android/app/build.gradle
+          sed -i 's/minSdkVersion 21/minSdkVersion 24/g' android/app/build.gradle
+          
+          # Inyecta el permiso de la cámara en el AndroidManifest.xml justo antes de la etiqueta <application>
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.CAMERA"/>' android/app/src/main/AndroidManifest.xml
+
+      # 6. Descarga los paquetes del pubspec.yaml
+      - name: Install Dependencies
+        run: flutter pub get
+
+      # 7. Compila el archivo APK de lanzamiento
+      - name: Build APK Release
+        run: flutter build apk --release
+
+      # 8. Sube el APK a GitHub para que lo descargues en tu celular
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          
