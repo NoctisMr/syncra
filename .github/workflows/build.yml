@@ -1,6 +1,5 @@
 name: Flutter CI/CD Build
 
-# Se ejecuta cada vez que haces un 'push' a la rama principal
 on:
   push:
     branches: [ "main", "master" ]
@@ -31,21 +30,32 @@ jobs:
           channel: 'stable'
           cache: true
 
-      # 4. LA MAGIA: Reconstruye la carpeta de Android faltante
+      # 4. Construye la carpeta de Android faltante
       - name: Generate Android Native Folders
         run: flutter create . --platforms=android
 
-      # 5. INYECCIÓN AUTOMÁTICA: Modifica los archivos nativos sin que tú los toques
+      # 5. INYECCIÓN INTELIGENTE: Soporta archivos modernos (Kotlin DSL) y clásicos (Groovy)
       - name: Inject ML Kit & Camera Requirements
         run: |
-          # Sube el minSdkVersion a 24 en el build.gradle usando sed
-          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 24/g' android/app/build.gradle
-          sed -i 's/minSdkVersion 21/minSdkVersion 24/g' android/app/build.gradle
+          # Ajustar el SDK mínimo según el tipo de archivo que Flutter haya generado
+          if [ -f android/app/build.gradle.kts ]; then
+            echo "🔧 Archivo moderno Kotlin DSL detectado. Modificando..."
+            sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/g' android/app/build.gradle.kts
+            sed -i 's/minSdk = 21/minSdk = 24/g' android/app/build.gradle.kts
+          elif [ -f android/app/build.gradle ]; then
+            echo "🔧 Archivo clásico Groovy detectado. Modificando..."
+            sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 24/g' android/app/build.gradle
+            sed -i 's/minSdkVersion 21/minSdkVersion 24/g' android/app/build.gradle
+          else
+            echo "❌ Error: No se encontró el archivo de configuración de Gradle."
+            exit 1
+          fi
           
-          # Inyecta el permiso de la cámara en el AndroidManifest.xml justo antes de la etiqueta <application>
+          # Inyectar el permiso de la cámara de forma segura en el Manifest
+          echo "📸 Inyectando permiso de cámara..."
           sed -i '/<application/i \    <uses-permission android:name="android.permission.CAMERA"/>' android/app/src/main/AndroidManifest.xml
 
-      # 6. Descarga los paquetes del pubspec.yaml
+      # 6. Descarga los paquetes
       - name: Install Dependencies
         run: flutter pub get
 
@@ -53,7 +63,7 @@ jobs:
       - name: Build APK Release
         run: flutter build apk --release
 
-      # 8. Sube el APK a GitHub para que lo descargues en tu celular
+      # 8. Sube el APK a GitHub
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
