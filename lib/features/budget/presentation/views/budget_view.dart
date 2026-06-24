@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart'; // Para formatear las fechas
+import 'package:intl/intl.dart';
 
 import '../../../../core/providers/app_provider.dart';
 import '../../../../core/localization/app_localizations.dart';
@@ -22,7 +22,6 @@ class _BudgetViewState extends State<BudgetView> {
   String _categoriaSeleccionada = 'cat_others';
   String? _monedaGastoSeleccionada;
 
-  // Configuración visual estática de las categorías
   final List<Map<String, dynamic>> _categoriesConfig = [
     {'id': 'cat_shopping', 'color': 0xFF29B6F6, 'icon': Icons.shopping_bag},
     {'id': 'cat_services', 'color': 0xFFFF8A65, 'icon': Icons.bolt},
@@ -35,11 +34,13 @@ class _BudgetViewState extends State<BudgetView> {
 
   @override
   Widget build(BuildContext context) {
-    // Inyectamos ambos Providers (Configuración global y Lógica de Presupuesto)
     final appProvider = context.watch<AppProvider>();
     final budgetProvider = context.watch<BudgetProvider>();
+    final theme = Theme.of(context);
     
-    // Función de traducción optimizada
+    // 🌟 DETECCIÓN DE FONDO: Para aplicar la transparencia inteligente
+    final bool hasBg = appProvider.backgroundImagePath != null;
+
     String t(String key) => AppLocalizations.translate(appProvider.language, key);
 
     double sueldo = double.tryParse(budgetProvider.sueldoCtrl.text) ?? 0.0;
@@ -58,7 +59,7 @@ class _BudgetViewState extends State<BudgetView> {
           // --- HEADER: MONEDA LOCAL ---
           Card(
             elevation: 0,
-            color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
+            color: hasBg ? theme.colorScheme.surface.withOpacity(0.85) : theme.colorScheme.surfaceVariant.withOpacity(0.5),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -84,35 +85,43 @@ class _BudgetViewState extends State<BudgetView> {
           const SizedBox(height: 16),
 
           // --- INPUT: SUELDO BASE ---
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: budgetProvider.sueldoCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(
-                    labelText: t('base_salary'), 
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    prefixIcon: const Icon(Icons.account_balance_wallet_outlined),
+          Card(
+            elevation: 0,
+            color: hasBg ? theme.colorScheme.surface.withOpacity(0.85) : Colors.transparent,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: hasBg ? 8.0 : 0, vertical: hasBg ? 4.0 : 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: budgetProvider.sueldoCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: InputDecoration(
+                        labelText: t('base_salary'), 
+                        border: hasBg ? InputBorder.none : OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        prefixIcon: const Icon(Icons.account_balance_wallet_outlined),
+                      ),
+                      onChanged: (_) => budgetProvider.calcularPresupuesto(),
+                    ),
                   ),
-                  onChanged: (_) => budgetProvider.calcularPresupuesto(),
-                ),
+                  IconButton(
+                    icon: const Icon(Icons.paste), 
+                    color: theme.colorScheme.primary, 
+                    onPressed: () => UiHelpers.pasteNumbersFromClipboard(
+                      budgetProvider.sueldoCtrl, 
+                      onDone: budgetProvider.calcularPresupuesto
+                    )
+                  )
+                ],
               ),
-              IconButton(
-                icon: const Icon(Icons.paste), 
-                color: Theme.of(context).colorScheme.primary, 
-                onPressed: () => UiHelpers.pasteNumbersFromClipboard(
-                  budgetProvider.sueldoCtrl, 
-                  onDone: budgetProvider.calcularPresupuesto
-                )
-              )
-            ],
+            ),
           ),
           const SizedBox(height: 24),
 
           // --- GRÁFICA CIRCULAR ---
           if (hasData) ...[
-            _buildChart(budgetProvider, appProvider, sueldo, t),
+            _buildChart(budgetProvider, appProvider, sueldo, t, hasBg),
             const SizedBox(height: 24),
           ],
 
@@ -120,7 +129,7 @@ class _BudgetViewState extends State<BudgetView> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(t('vaults'), style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
+              Text(t('vaults'), style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
               IconButton(
                 icon: const Icon(Icons.add_box, color: Colors.amber), 
                 onPressed: () => _mostrarDialogoBoveda(context, budgetProvider, appProvider, t)
@@ -134,7 +143,7 @@ class _BudgetViewState extends State<BudgetView> {
                 scrollDirection: Axis.horizontal,
                 itemCount: budgetProvider.bovedas.length,
                 itemBuilder: (context, index) {
-                  return _buildVaultCard(budgetProvider.bovedas[index], budgetProvider, appProvider, t);
+                  return _buildVaultCard(budgetProvider.bovedas[index], budgetProvider, appProvider, t, hasBg);
                 },
               ),
             ),
@@ -142,7 +151,7 @@ class _BudgetViewState extends State<BudgetView> {
           ],
 
           // --- FORMULARIO: NUEVO GASTO ---
-          _buildAddExpenseSection(budgetProvider, currentMonedaGasto, appProvider.tasasCambio.keys.toList(), t),
+          _buildAddExpenseSection(budgetProvider, currentMonedaGasto, appProvider.tasasCambio.keys.toList(), t, hasBg),
           const SizedBox(height: 16),
 
           // --- HISTORIAL DE GASTOS ---
@@ -167,9 +176,10 @@ class _BudgetViewState extends State<BudgetView> {
               child: Card(
                 margin: const EdgeInsets.symmetric(vertical: 4),
                 elevation: 0,
+                color: hasBg ? theme.colorScheme.surface.withOpacity(0.85) : theme.colorScheme.surface,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.5)),
+                  side: BorderSide(color: theme.colorScheme.outlineVariant.withOpacity(0.5)),
                 ),
                 child: ListTile(
                   leading: CircleAvatar(
@@ -177,13 +187,12 @@ class _BudgetViewState extends State<BudgetView> {
                     child: Icon(catConfig['icon'], color: Color(catConfig['color']), size: 20)
                   ),
                   title: Text(gasto.nombre, style: const TextStyle(fontWeight: FontWeight.w600)),
-                  // 🌟 Aquí usamos la nueva fecha del modelo estricto
                   subtitle: Text("${t(gasto.categoria)} • ${DateFormat('dd MMM yyyy, HH:mm').format(gasto.fecha)}", style: const TextStyle(fontSize: 11)),
                   trailing: Column(
                     mainAxisAlignment: MainAxisAlignment.center, 
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text("${_numFormat.format(gasto.montoOriginal)} ${gasto.monedaOriginal}", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Theme.of(context).colorScheme.onSurface)),
+                      Text("${_numFormat.format(gasto.montoOriginal)} ${gasto.monedaOriginal}", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: theme.colorScheme.onSurface)),
                       if (esExtranjero) 
                         Text("~ ${_numFormat.format(gasto.montoLocal)} ${appProvider.monedaLocal}", style: const TextStyle(fontSize: 11, color: Colors.grey)),
                     ],
@@ -197,11 +206,7 @@ class _BudgetViewState extends State<BudgetView> {
     );
   }
 
-  // =========================================================================
-  // MÉTODOS PRIVADOS PARA CONSTRUIR LA UI Y MANTENER EL BUILD LIMPIO
-  // =========================================================================
-
-  Widget _buildChart(BudgetProvider provider, AppProvider appProvider, double sueldoTotal, String Function(String) t) {
+  Widget _buildChart(BudgetProvider provider, AppProvider appProvider, double sueldoTotal, String Function(String) t, bool hasBg) {
     List<PieChartSectionData> sections = [];
     Map<String, double> sumas = {};
     int indexCounter = 0;
@@ -236,8 +241,13 @@ class _BudgetViewState extends State<BudgetView> {
       ));
     }
 
-    return SizedBox(
+    return Container(
       height: 220,
+      decoration: hasBg ? BoxDecoration(
+        color: Theme.of(context).colorScheme.surface.withOpacity(0.85),
+        borderRadius: BorderRadius.circular(20)
+      ) : null,
+      padding: hasBg ? const EdgeInsets.all(16) : null,
       child: Stack(
         alignment: Alignment.center,
         children: [
@@ -265,13 +275,13 @@ class _BudgetViewState extends State<BudgetView> {
     );
   }
 
-  Widget _buildVaultCard(dynamic boveda, BudgetProvider budgetProvider, AppProvider appProvider, String Function(String) t) {
+  Widget _buildVaultCard(dynamic boveda, BudgetProvider budgetProvider, AppProvider appProvider, String Function(String) t, bool hasBg) {
     double progreso = (boveda.ahorrado / boveda.objetivo).clamp(0.0, 1.0);
     return Container(
       width: 220, margin: const EdgeInsets.only(right: 12),
       child: Card(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        color: Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.3),
+        color: hasBg ? Theme.of(context).colorScheme.surface.withOpacity(0.85) : Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.3),
         elevation: 0,
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -318,9 +328,11 @@ class _BudgetViewState extends State<BudgetView> {
     );
   }
 
-  Widget _buildAddExpenseSection(BudgetProvider budgetProvider, String currentMonedaGasto, List<String> divisas, String Function(String) t) {
+  Widget _buildAddExpenseSection(BudgetProvider budgetProvider, String currentMonedaGasto, List<String> divisas, String Function(String) t, bool hasBg) {
     return Card(
-      elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.3))),
+      elevation: 0, 
+      color: hasBg ? Theme.of(context).colorScheme.surface.withOpacity(0.85) : Theme.of(context).colorScheme.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.3))),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -428,4 +440,4 @@ class _BudgetViewState extends State<BudgetView> {
       ),
     );
   }
-}
+}                                                                                                                                 
