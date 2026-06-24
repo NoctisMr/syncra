@@ -16,7 +16,6 @@ class ConverterView extends StatefulWidget {
 }
 
 class _ConverterViewState extends State<ConverterView> {
-  // Controladores vacíos para que no salga el molesto '0'
   final TextEditingController _amountCtrl = TextEditingController();
   final TextEditingController _feeCtrl = TextEditingController();
   String _fromCurr = 'USD';
@@ -33,14 +32,17 @@ class _ConverterViewState extends State<ConverterView> {
   Widget build(BuildContext context) {
     final appProvider = context.watch<AppProvider>();
     final converterProvider = context.watch<ConverterProvider>();
+    final theme = Theme.of(context);
+    
+    // 🌟 DETECCIÓN DE FONDO
+    final bool hasBg = appProvider.backgroundImagePath != null;
+    
     String t(String key) => AppLocalizations.translate(appProvider.language, key);
 
-    // Seguridad para las divisas del Dropdown
     List<String> currencies = appProvider.tasasCambio.keys.toList();
     if (!currencies.contains(_fromCurr) && currencies.isNotEmpty) _fromCurr = currencies.first;
     if (!currencies.contains(_toCurr) && currencies.isNotEmpty) _toCurr = currencies.first;
 
-    // Lógica Matemática Manual en Tiempo Real
     double amount = double.tryParse(_amountCtrl.text.replaceAll(',', '.')) ?? 0.0;
     double fee = double.tryParse(_feeCtrl.text.replaceAll(',', '.')) ?? 0.0;
     double rateFrom = (appProvider.tasasCambio[_fromCurr] ?? 1.0).toDouble();
@@ -50,6 +52,7 @@ class _ConverterViewState extends State<ConverterView> {
     double finalConverted = baseConverted + (baseConverted * (fee / 100));
 
     return Scaffold(
+      backgroundColor: Colors.transparent, // Permite ver el fondo
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -62,9 +65,10 @@ class _ConverterViewState extends State<ConverterView> {
             const SizedBox(height: 8),
             Card(
               elevation: 0,
+              color: hasBg ? theme.colorScheme.surface.withOpacity(0.85) : theme.colorScheme.surface,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
-                side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.4)),
+                side: BorderSide(color: theme.colorScheme.outlineVariant.withOpacity(0.4)),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -124,7 +128,7 @@ class _ConverterViewState extends State<ConverterView> {
                       style: TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.w900,
-                        color: Theme.of(context).colorScheme.primary,
+                        color: theme.colorScheme.primary,
                       ),
                     ),
                   ],
@@ -140,7 +144,7 @@ class _ConverterViewState extends State<ConverterView> {
             const SizedBox(height: 8),
             Card(
               elevation: 0,
-              color: Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.3),
+              color: hasBg ? theme.colorScheme.surface.withOpacity(0.85) : theme.colorScheme.secondaryContainer.withOpacity(0.3),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
@@ -153,7 +157,7 @@ class _ConverterViewState extends State<ConverterView> {
                       style: TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.w900,
-                        color: Theme.of(context).colorScheme.secondary,
+                        color: theme.colorScheme.secondary,
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -194,6 +198,7 @@ class _ConverterViewState extends State<ConverterView> {
               const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()))
             else
               ...converterProvider.scannedItems.map((item) => Card(
+                color: hasBg ? theme.colorScheme.surface.withOpacity(0.85) : theme.colorScheme.surface,
                 margin: const EdgeInsets.only(bottom: 4),
                 child: ListTile(
                   dense: true,
