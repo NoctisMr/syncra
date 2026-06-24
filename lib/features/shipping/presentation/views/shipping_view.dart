@@ -22,6 +22,11 @@ class _ShippingViewState extends State<ShippingView> {
   Widget build(BuildContext context) {
     final appProvider = context.watch<AppProvider>();
     final shippingProvider = context.watch<ShippingProvider>();
+    final theme = Theme.of(context);
+    
+    // 🌟 DETECCIÓN DE FONDO
+    final bool hasBg = appProvider.backgroundImagePath != null;
+    
     String t(String key) => AppLocalizations.translate(appProvider.language, key);
 
     return SingleChildScrollView(
@@ -30,23 +35,23 @@ class _ShippingViewState extends State<ShippingView> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // --- FORMULARIO DE ENTRADA ---
-          _buildInputSection(shippingProvider, appProvider, t),
+          _buildInputSection(shippingProvider, appProvider, t, theme, hasBg),
           const SizedBox(height: 16),
 
           // --- DESGLOSE DE RESULTADOS (RECIBO) ---
-          _buildReceiptSection(shippingProvider, appProvider, t),
+          _buildReceiptSection(shippingProvider, appProvider, t, theme, hasBg),
           const SizedBox(height: 24),
 
           // --- HISTORIAL DE COTIZACIONES ---
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(t('saved_quotes'), style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
+              Text(t('saved_quotes'), style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
               const Icon(Icons.history, size: 20, color: Colors.grey),
             ],
           ),
           const SizedBox(height: 12),
-          ...shippingProvider.cotizaciones.map((quote) => _buildQuoteCard(quote, shippingProvider, t)),
+          ...shippingProvider.cotizaciones.map((quote) => _buildQuoteCard(quote, shippingProvider, t, theme, hasBg)),
           
           if (shippingProvider.cotizaciones.isEmpty)
             Padding(
@@ -60,18 +65,15 @@ class _ShippingViewState extends State<ShippingView> {
     );
   }
 
-  // =========================================================================
-  // MÉTODOS PRIVADOS DE CONSTRUCCIÓN VISUAL
-  // =========================================================================
-
-  Widget _buildInputSection(ShippingProvider provider, AppProvider appProvider, String Function(String) t) {
+  Widget _buildInputSection(ShippingProvider provider, AppProvider appProvider, String Function(String) t, ThemeData theme, bool hasBg) {
     List<String> divisasDisponibles = appProvider.tasasCambio.keys.toList();
 
     return Card(
       elevation: 0,
+      color: hasBg ? theme.colorScheme.surface.withOpacity(0.85) : theme.colorScheme.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.4)),
+        side: BorderSide(color: theme.colorScheme.outlineVariant.withOpacity(0.4)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -155,9 +157,9 @@ class _ShippingViewState extends State<ShippingView> {
     );
   }
 
-  Widget _buildReceiptSection(ShippingProvider provider, AppProvider appProvider, String Function(String) t) {
+  Widget _buildReceiptSection(ShippingProvider provider, AppProvider appProvider, String Function(String) t, ThemeData theme, bool hasBg) {
     return Card(
-      color: Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.3),
+      color: hasBg ? theme.colorScheme.surface.withOpacity(0.85) : theme.colorScheme.secondaryContainer.withOpacity(0.3),
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
@@ -198,10 +200,10 @@ class _ShippingViewState extends State<ShippingView> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(t('total_to_pay'), style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                    Text(t('total_to_pay'), style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant)),
                     Text(
                       "${_numFormat.format(provider.totalEnvio)} ${provider.monedaDestinoEnvio}",
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Theme.of(context).colorScheme.primary),
+                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: theme.colorScheme.primary),
                     ),
                   ],
                 ),
@@ -209,7 +211,7 @@ class _ShippingViewState extends State<ShippingView> {
                   onPressed: provider.totalEnvio > 0 ? () {
                     provider.guardarCotizacion();
                     HapticFeedback.mediumImpact();
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('quote_saved'))));
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('quote_saved') ?? 'Guardado')));
                   } : null,
                   icon: const Icon(Icons.save, size: 18),
                   label: Text(t('save')),
@@ -236,7 +238,7 @@ class _ShippingViewState extends State<ShippingView> {
     );
   }
 
-  Widget _buildQuoteCard(dynamic quote, ShippingProvider provider, String Function(String) t) {
+  Widget _buildQuoteCard(dynamic quote, ShippingProvider provider, String Function(String) t, ThemeData theme, bool hasBg) {
     return Dismissible(
       key: Key(quote.id),
       direction: DismissDirection.endToStart,
@@ -254,15 +256,16 @@ class _ShippingViewState extends State<ShippingView> {
       child: Card(
         margin: const EdgeInsets.symmetric(vertical: 4),
         elevation: 0,
+        color: hasBg ? theme.colorScheme.surface.withOpacity(0.85) : theme.colorScheme.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.3)),
+          side: BorderSide(color: theme.colorScheme.outlineVariant.withOpacity(0.3)),
         ),
         child: ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           leading: CircleAvatar(
-            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-            child: Icon(Icons.local_shipping, color: Theme.of(context).colorScheme.onPrimaryContainer, size: 20),
+            backgroundColor: theme.colorScheme.primaryContainer,
+            child: Icon(Icons.local_shipping, color: theme.colorScheme.onPrimaryContainer, size: 20),
           ),
           title: Text("${quote.origen} ➔ ${quote.destino}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
           subtitle: Text("${quote.peso} kg • ${DateFormat('dd MMM yy').format(quote.fecha)}", style: const TextStyle(fontSize: 12)),
