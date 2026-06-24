@@ -12,58 +12,64 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Clona tu código fuente (tu carpeta lib y pubspec)
+      # 1. Clona tu código fuente
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. Configura Java en el servidor
+      # 2. Configura Java
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      # 3. Instala Flutter en el servidor
+      # 3. Instala Flutter
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
 
-      # 4. Construye la carpeta de Android faltante
+      # 4. Genera las carpetas nativas de Android
       - name: Generate Android Native Folders
         run: flutter create . --platforms=android
 
-      # 5. INYECCIÓN INTELIGENTE: Soporta archivos modernos (Kotlin DSL) y clásicos (Groovy)
-      - name: Inject ML Kit & Camera Requirements
+      # 5. Inyecta SDK mínimo y permisos de cámara
+      - name: Inject Camera & SDK Requirements
         run: |
-          # Ajustar el SDK mínimo según el tipo de archivo que Flutter haya generado
           if [ -f android/app/build.gradle.kts ]; then
-            echo "🔧 Archivo moderno Kotlin DSL detectado. Modificando..."
             sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/g' android/app/build.gradle.kts
             sed -i 's/minSdk = 21/minSdk = 24/g' android/app/build.gradle.kts
           elif [ -f android/app/build.gradle ]; then
-            echo "🔧 Archivo clásico Groovy detectado. Modificando..."
             sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 24/g' android/app/build.gradle
             sed -i 's/minSdkVersion 21/minSdkVersion 24/g' android/app/build.gradle
-          else
-            echo "❌ Error: No se encontró el archivo de configuración de Gradle."
-            exit 1
           fi
           
-          # Inyectar el permiso de la cámara de forma segura en el Manifest
-          echo "📸 Inyectando permiso de cámara..."
           sed -i '/<application/i \    <uses-permission android:name="android.permission.CAMERA"/>' android/app/src/main/AndroidManifest.xml
 
-      # 6. Descarga los paquetes
+      # 6. LA SOLUCIÓN AL R8: Crea reglas ProGuard para que no rompa el ML Kit
+      - name: Fix R8 Minifier / ProGuard rules
+        run: |
+          # Creamos el archivo con las reglas que le dicen a R8 "no toques nada de Google ML Kit"
+          echo "-dontwarn com.google.mlkit.**" > android/app/proguard-rules.pro
+          echo "-keep class com.google.mlkit.** { *; }" >> android/app/proguard-rules.pro
+          
+          # Le decimos a Gradle que use este archivo que acabamos de crear
+          if [ -f android/app/build.gradle.kts ]; then
+            sed -i '/targetSdk/a \        proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")' android/app/build.gradle.kts
+          elif [ -f android/app/build.gradle ]; then
+            sed -i '/targetSdkVersion/a \        proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"' android/app/build.gradle
+          fi
+
+      # 7. Descarga paquetes
       - name: Install Dependencies
         run: flutter pub get
 
-      # 7. Compila el archivo APK de lanzamiento
+      # 8. Compila el APK
       - name: Build APK Release
         run: flutter build apk --release
 
-      # 8. Sube el APK a GitHub
+      # 9. Sube el APK final
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
