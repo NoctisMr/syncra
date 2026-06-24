@@ -20,7 +20,7 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  // 3. Inicializa la base de datos (Ahora que Hive está en el pubspec, esto funcionará perfecto)
+  // 3. Inicializa la base de datos local (Hive)
   await LocalStorageService.instance.init();
 
   // 4. Iniciar la app
@@ -39,21 +39,45 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ConverterProvider()),
         ChangeNotifierProvider(create: (_) => ShippingProvider()),
       ],
-      child: MaterialApp(
-        title: 'Global Wallet & Shipping',
-        debugShowCheckedModeBanner: false,
-        themeMode: ThemeMode.system, // Fallback automático y seguro a nivel sistema
-        theme: ThemeData(
-          useMaterial3: true,
-          colorSchemeSeed: const Color(0xFF1E3A8A),
-          brightness: Brightness.light,
-        ),
-        darkTheme: ThemeData(
-          useMaterial3: true,
-          colorSchemeSeed: const Color(0xFF1E3A8A),
-          brightness: Brightness.dark,
-        ),
-        home: const MainNavigationWrapper(),
+      // 🌟 SOLUCIÓN: Usamos Consumer para escuchar dinámicamente los cambios visuales y refrescar el tema
+      child: Consumer<AppProvider>(
+        builder: (context, appProvider, child) {
+          return MaterialApp(
+            title: 'Global Wallet & Shipping',
+            debugShowCheckedModeBanner: false,
+            themeMode: appProvider.themeMode, // Vinculado a las opciones guardadas
+            
+            // TEMA CLARO DINÁMICO
+            theme: ThemeData(
+              useMaterial3: true,
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: appProvider.seedColor, // Color puro o inteligentemente mezclado con la foto
+                brightness: Brightness.light,
+              ),
+              // Si hay imagen de fondo, hacemos el andamiaje transparente para renderizar el fondo real detrás
+              scaffoldBackgroundColor: appProvider.backgroundImagePath != null 
+                  ? Colors.transparent 
+                  : null,
+            ),
+            
+            // TEMA OSCURO DINÁMICO
+            darkTheme: ThemeData(
+              useMaterial3: true,
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: appProvider.seedColor,
+                brightness: Brightness.dark,
+              ),
+              scaffoldBackgroundColor: appProvider.backgroundImagePath != null 
+                  ? Colors.transparent 
+                  : null,
+            ),
+            
+            // Espera a que termine la carga asíncrona de IPs, APIs e idiomas antes de renderizar la UI
+            home: appProvider.isLoading 
+                ? const Scaffold(body: Center(child: CircularProgressIndicator()))
+                : const MainNavigationWrapper(),
+          );
+        },
       ),
     );
   }
