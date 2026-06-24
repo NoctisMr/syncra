@@ -19,6 +19,25 @@ class LocalStorageService {
     _settingsBox = await Hive.openBox(_settingsBoxName);
   }
 
-  Box get dataBox => _dataBox;
-  Box get settingsBox => _settingsBox;
+  // =========================================================================
+  // MÉTODOS PARA DATOS GENERALES (Presupuesto, Envíos, etc.)
+  // =========================================================================
+  dynamic getData(String key, {dynamic defaultValue}) {
+    return _dataBox.get(key, defaultValue: defaultValue);
+  }
+
+  Future<void> saveData(String key, dynamic value) async {
+    await _dataBox.put(key, value);
+  }
+
+  // =========================================================================
+  // MÉTODOS PARA AJUSTES DE LA APLICACIÓN (Tema, Idioma, Moneda base)
+  // =========================================================================
+  dynamic getSetting(String key, {dynamic defaultValue}) {
+    return _settingsBox.get(key, defaultValue: defaultValue);
+  }
+
+  Future<void> saveSetting(String key, dynamic value) async {
+    await _settingsBox.put(key, value);
+  }
 }
