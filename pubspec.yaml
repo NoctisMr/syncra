@@ -17,6 +17,10 @@ dependencies:
   http: ^1.2.1
   image_picker: ^1.1.2
   google_mlkit_text_recognition: ^0.13.0
+  path_provider: ^2.1.2
+  share_plus: ^7.2.1
+  file_picker: ^6.1.1
+  csv: ^5.1.1
   
   # Base de datos y Gráficos
   hive: ^2.2.3
