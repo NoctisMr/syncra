@@ -1,4 +1,4 @@
-// Archivo: lib/core/providers/app_provider.dart
+// lib/core/providers/app_provider.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:palette_generator/palette_generator.dart';
@@ -10,20 +10,17 @@ class AppProvider extends ChangeNotifier {
   final LocalStorageService _storage = LocalStorageService.instance;
   final CurrencyService _currencyService = CurrencyService.instance;
 
-  // --- ESTADOS DE CONFIGURACIÓN ---
-  ThemeMode _themeMode = ThemeMode.system; // Por defecto al sistema
-  Color _originalSeedColor = AppConfig.defaultSeedColor; // El color base elegido
-  Color _seedColor = AppConfig.defaultSeedColor; // El color final (mezclado si hay imagen)
+  ThemeMode _themeMode = ThemeMode.system;
+  Color _originalSeedColor = AppConfig.defaultSeedColor;
+  Color _seedColor = AppConfig.defaultSeedColor;
   String _language = 'en';
   bool _isLoading = true;
   String? _backgroundImagePath;
 
-  // --- ESTADOS DE DIVISAS ---
   Map<String, double> _tasasCambio = AppConfig.defaultExchangeRates;
   int _ultimaActualizacionEpoch = 0;
   String _monedaLocal = 'USD';
 
-  // --- GETTERS ---
   ThemeMode get themeMode => _themeMode;
   Color get seedColor => _seedColor;
   Color get originalSeedColor => _originalSeedColor;
@@ -34,7 +31,6 @@ class AppProvider extends ChangeNotifier {
   int get ultimaActualizacionEpoch => _ultimaActualizacionEpoch;
   String get monedaLocal => _monedaLocal;
 
-  // 🌟 SOLUCIÓN: El constructor ahora arranca la inicialización automáticamente
   AppProvider() {
     initApp();
   }
@@ -43,41 +39,36 @@ class AppProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    // 1. Cargar preferencias visuales (Tema)
+    // Theme Mode
     final String savedTheme = _storage.getSetting('themeMode', defaultValue: 'system');
     if (savedTheme == 'dark') _themeMode = ThemeMode.dark;
     else if (savedTheme == 'light') _themeMode = ThemeMode.light;
     else _themeMode = ThemeMode.system;
 
-    // 2. Cargar Color
+    // Base Color
     final int savedColorValue = _storage.getSetting('seedColor', defaultValue: AppConfig.defaultSeedColor.value);
     _originalSeedColor = Color(savedColorValue);
-    _seedColor = _originalSeedColor; // Inicialmente son iguales
+    _seedColor = _originalSeedColor;
 
-    // 3. 🌟 AUTODETECCIÓN DE IDIOMA
+    // Language Detection
     final String? savedLang = _storage.getSetting('language');
     if (savedLang != null) {
       _language = savedLang;
     } else {
-      // Si es la primera vez, lee el idioma del dispositivo
       String deviceLang = WidgetsBinding.instance.platformDispatcher.locale.languageCode;
-      if (['es', 'en', 'pt'].contains(deviceLang)) {
-        _language = deviceLang;
-      } else {
-        _language = 'en'; // Fallback global
-      }
+      _language = ['es', 'en', 'pt'].contains(deviceLang) ? deviceLang : 'en';
       _storage.saveSetting('language', _language);
     }
 
-    // 4. Cargar Imagen de Fondo y extraer paleta
+    // Background Image & Palette
     _backgroundImagePath = _storage.getSetting('backgroundImagePath');
     if (_backgroundImagePath != null && File(_backgroundImagePath!).existsSync()) {
       await _updatePaletteFromImage(_backgroundImagePath!);
     } else {
-      _backgroundImagePath = null; // Limpiar si la imagen fue borrada del dispositivo
+      _backgroundImagePath = null;
     }
 
-    // 5. Cargar divisas previas o por defecto
+    // Exchange Rates
     final Map? savedRates = _storage.getData('tasasCambio');
     if (savedRates != null) {
       _tasasCambio = savedRates.map((key, value) => MapEntry(key.toString(), double.parse(value.toString())));
@@ -85,21 +76,16 @@ class AppProvider extends ChangeNotifier {
     _ultimaActualizacionEpoch = _storage.getData('ultimaActualizacion', defaultValue: 0);
     _monedaLocal = _storage.getSetting('monedaLocal', defaultValue: 'USD');
 
-    // 6. 🌟 AUTODETECCIÓN DE MONEDA (Si es la primera vez)
+    // Geo-IP Currency Detection
     if (_storage.getSetting('monedaLocal') == null) {
       await _detectarMonedaPorIP();
     }
 
-    // 7. 🌟 ACTUALIZAR TASAS DE INTERNET
     await actualizarTasasDesdeInternet();
 
     _isLoading = false;
     notifyListeners();
   }
-
-  // =======================================================
-  // MUTADORES DE DISEÑO Y PERSONALIZACIÓN
-  // =======================================================
 
   void updateThemeMode(String mode) {
     if (mode == 'dark') _themeMode = ThemeMode.dark;
@@ -112,10 +98,9 @@ class AppProvider extends ChangeNotifier {
 
   void updateSeedColor(Color newColor) {
     _originalSeedColor = newColor;
-    _seedColor = newColor; // Reseteamos
+    _seedColor = newColor; 
     _storage.saveSetting('seedColor', newColor.value);
     
-    // Si hay imagen, volvemos a aplicar la mezcla sutil
     if (_backgroundImagePath != null) {
       _updatePaletteFromImage(_backgroundImagePath!);
     } else {
@@ -129,12 +114,11 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // 🌟 NUEVO: Gestor de Imagen de Fondo
   Future<void> setBackgroundImage(String? path) async {
     _backgroundImagePath = path;
     if (path == null) {
       _storage.saveSetting('backgroundImagePath', null);
-      _seedColor = _originalSeedColor; // Restaurar color puro
+      _seedColor = _originalSeedColor;
       notifyListeners();
     } else {
       _storage.saveSetting('backgroundImagePath', path);
@@ -142,24 +126,17 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  // 🌟 NUEVO: Extracción de paleta y fusión sutil (Lerp)
   Future<void> _updatePaletteFromImage(String path) async {
     try {
       final PaletteGenerator palette = await PaletteGenerator.fromImageProvider(FileImage(File(path)));
       if (palette.dominantColor != null) {
-        // Fusiona el color elegido (70%) con el dominante de la foto (30%).
-        // Esto adapta la app a la foto sin romper el diseño.
         _seedColor = Color.lerp(_originalSeedColor, palette.dominantColor!.color, 0.3) ?? _originalSeedColor;
       }
     } catch (e) {
-      debugPrint("Error leyendo colores de la imagen: $e");
+      debugPrint("Palette extraction error: $e");
     }
     notifyListeners();
   }
-
-  // =======================================================
-  // MUTADORES DE DIVISAS
-  // =======================================================
 
   void updateMonedaLocal(String currencyCode) {
     if (_tasasCambio.containsKey(currencyCode)) {
@@ -177,7 +154,7 @@ class AppProvider extends ChangeNotifier {
       
       await _storage.saveData('tasasCambio', _tasasCambio);
       await _storage.saveData('ultimaActualizacion', _ultimaActualizacionEpoch);
-      notifyListeners(); // 🌟 SOLUCIÓN: Avisar a la UI que llegaron nuevas tasas
+      notifyListeners();
     }
   }
 
