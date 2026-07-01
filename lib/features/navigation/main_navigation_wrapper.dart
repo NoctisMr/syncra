@@ -1,4 +1,4 @@
-// Archivo: lib/features/navigation/main_navigation_wrapper.dart
+// lib/features/navigation/main_navigation_wrapper.dart
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -53,7 +53,6 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             onPressed: () => _showCustomizationSheet(context, appProvider, t),
-            tooltip: "Ajustes y Datos",
           ),
         ],
       ),
@@ -88,7 +87,7 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
       ),
     );
 
-    // 🌟 RENDERIZADO OPTIMIZADO EXTREMO
+    // Optimized rendering for background images
     if (appProvider.backgroundImagePath != null) {
       final file = File(appProvider.backgroundImagePath!);
       if (file.existsSync()) {
@@ -100,7 +99,7 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
                 child: Image.file(
                   file,
                   fit: BoxFit.cover,
-                  cacheWidth: 800, // <-- CRÍTICO: Previene el consumo excesivo de RAM y lag
+                  cacheWidth: 800, // RAM optimization
                 ),
               ),
               Positioned.fill(
@@ -131,7 +130,7 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
       builder: (context) {
         final theme = Theme.of(context);
         return DraggableScrollableSheet(
-          initialChildSize: 0.75, // Ocupa un poco más por las nuevas opciones
+          initialChildSize: 0.75,
           maxChildSize: 0.9,
           minChildSize: 0.5,
           expand: false,
@@ -146,7 +145,7 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
                 Text("Ajustes Globales", style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold), textAlign: TextAlign.center),
                 const SizedBox(height: 32),
 
-                // -- DATOS Y BACKUP (NUEVO) --
+                // Backup & Export (JSON/CSV)
                 Text("Copia de Seguridad y Exportación", style: theme.textTheme.titleMedium?.copyWith(fontSize: 14, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 12),
                 Wrap(
@@ -158,13 +157,13 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
                         if(context.mounted) Navigator.pop(context);
                       },
                       icon: const Icon(Icons.cloud_upload_outlined, size: 18),
-                      label: const Text("Respaldar Todo (JSON)"),
+                      label: const Text("Respaldar (JSON)"),
                     ),
                     FilledButton.tonalIcon(
                       onPressed: () async {
                         bool success = await BackupExportService.instance.importBackup();
                         if (success && context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Datos restaurados con éxito. Reinicia la app.")));
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Datos restaurados con éxito.")));
                           Navigator.pop(context);
                         }
                       },
@@ -177,7 +176,7 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
                         await BackupExportService.instance.exportToExcel('budget', gastos);
                       },
                       icon: const Icon(Icons.table_chart_outlined, size: 18),
-                      label: const Text("Exportar Mes (Excel)"),
+                      label: const Text("Exportar Mes (CSV)"),
                     ),
                   ],
                 ),
@@ -185,7 +184,7 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
                 const Divider(),
                 const SizedBox(height: 16),
 
-                // -- INTERFAZ Y COLORES --
+                // Theme settings
                 Text("Tema del Sistema", style: theme.textTheme.titleMedium?.copyWith(fontSize: 14, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                 SegmentedButton<ThemeMode>(
@@ -202,6 +201,7 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
                 ),
                 const SizedBox(height: 24),
 
+                // Color Seed settings
                 Text("Esquema de Color Base", style: theme.textTheme.titleMedium?.copyWith(fontSize: 14, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 12),
                 SizedBox(
@@ -225,7 +225,8 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
                 ),
                 const SizedBox(height: 24),
 
-                Text("Fondo de Pantalla (Optimizado)", style: theme.textTheme.titleMedium?.copyWith(fontSize: 14, fontWeight: FontWeight.w600)),
+                // Background Image Optimization settings
+                Text("Fondo de Pantalla", style: theme.textTheme.titleMedium?.copyWith(fontSize: 14, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                 Row(
                   children: [
@@ -233,11 +234,10 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
                       child: OutlinedButton.icon(
                         onPressed: () async {
                           final picker = ImagePicker();
-                          // 🌟 OPTIMIZACIÓN ACTIVA: Comprimir la imagen antes de subirla
                           final XFile? image = await picker.pickImage(
                             source: ImageSource.gallery,
-                            imageQuality: 75, // Reduce el peso sin perder calidad perceptible
-                            maxWidth: 1080,   // Limita a Full HD para evitar desbordamiento de VRAM
+                            imageQuality: 75, // Compression
+                            maxWidth: 1080,   // Downscaling
                           );
                           if (image != null) await provider.setBackgroundImage(image.path);
                         },
@@ -253,6 +253,7 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
                 ),
                 const SizedBox(height: 24),
 
+                // Localization settings
                 Text("Idioma Base", style: theme.textTheme.titleMedium?.copyWith(fontSize: 14, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
