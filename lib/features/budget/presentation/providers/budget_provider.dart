@@ -1,81 +1,72 @@
-// Archivo: lib/features/budget/presentation/providers/budget_provider.dart
+// lib/features/budget/presentation/providers/budget_provider.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/database/local_storage_service.dart';
 import '../../data/models/gasto_model.dart';
-import '../../data/models/boveda_model.dart';
+import '../../data/models/vault_model.dart';
 
 class BudgetProvider with ChangeNotifier {
   final _storage = LocalStorageService.instance;
 
-  // Controladores de UI
   final TextEditingController sueldoCtrl = TextEditingController();
   final TextEditingController nombreGastoCtrl = TextEditingController();
   final TextEditingController montoGastoCtrl = TextEditingController();
 
-  // --- NUEVO: SISTEMA DE CALENDARIO MENSUAL ---
   DateTime _currentMonth = DateTime.now();
   DateTime get currentMonth => _currentMonth;
   
-  // Guardaremos los sueldos en un mapa, ej: {"2026-06": 1500.0}
   Map<String, double> _sueldosMensuales = {};
+  List<GastoModel> _todosLosGastos = [];
+  List<VaultModel> bovedas = [];
 
-  List<Gasto> _todosLosGastos = [];
-  List<Boveda> bovedas = [];
-
-  // Variables calculadas (Solo para el mes actual)
   double balanceLocal = 0.0;
+  double balanceEq = 0.0;
 
   BudgetProvider() {
     _loadData();
   }
 
-  // Obtiene la clave del mes actual (ej: "2026-06")
   String get _monthKey => DateFormat('yyyy-MM').format(_currentMonth);
 
-  // Filtra los gastos para mostrar SOLO los del mes actual
-  List<Gasto> get gastosDelMes {
+  List<GastoModel> get gastosDelMes {
     return _todosLosGastos.where((g) {
       return g.fecha.year == _currentMonth.year && g.fecha.month == _currentMonth.month;
     }).toList();
   }
 
   void _loadData() {
-    // Cargar sueldos mensuales
-    final sueldosMap = _storage.budgetBox.get('sueldosMensuales') ?? {};
+    final sueldosMap = _storage.getData('sueldosMensuales') ?? {};
     _sueldosMensuales = Map<String, double>.from(sueldosMap);
 
-    // Cargar gastos
-    final gastosData = _storage.budgetBox.get('gastos', defaultValue: []);
-    _todosLosGastos = (gastosData as List).map((e) => Gasto.fromMap(Map<String, dynamic>.from(e))).toList();
+    final List? gastosData = _storage.getData('gastos_v2');
+    if (gastosData != null) {
+      _todosLosGastos = gastosData.map((e) => GastoModel.fromMap(e)).toList();
+    }
     
-    // Cargar bóvedas
-    final bovedasData = _storage.budgetBox.get('bovedas', defaultValue: []);
-    bovedas = (bovedasData as List).map((e) => Boveda.fromMap(Map<String, dynamic>.from(e))).toList();
+    final List? bovedasData = _storage.getData('bovedas');
+    if (bovedasData != null) {
+      bovedas = bovedasData.map((e) => VaultModel.fromMap(e)).toList();
+    }
 
     _actualizarUIAlCambiarMes();
   }
 
-  // --- NAVEGACIÓN DEL CALENDARIO ---
   void cambiarMes(int offset) {
     _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + offset);
     _actualizarUIAlCambiarMes();
   }
 
   void _actualizarUIAlCambiarMes() {
-    // Actualizar el TextField del sueldo al del mes seleccionado
     double sueldoActual = _sueldosMensuales[_monthKey] ?? 0.0;
     sueldoCtrl.text = sueldoActual > 0 ? sueldoActual.toStringAsFixed(2) : '';
     calcularPresupuesto();
   }
 
-  // --- CÁLCULO DINÁMICO ---
   void calcularPresupuesto() {
     double sueldo = double.tryParse(sueldoCtrl.text) ?? 0.0;
     
-    // Guardar el sueldo del mes actual en memoria y BD
     _sueldosMensuales[_monthKey] = sueldo;
-    _storage.budgetBox.put('sueldosMensuales', _sueldosMensuales);
+    _storage.saveData('sueldosMensuales', _sueldosMensuales);
 
     double totalGastosMes = gastosDelMes.fold(0.0, (sum, item) => sum + item.montoLocal);
     double totalBovedas = bovedas.fold(0.0, (sum, item) => sum + item.ahorrado);
@@ -84,16 +75,13 @@ class BudgetProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // --- GESTIÓN DE GASTOS ---
-  void addGasto(String nombre, double montoOriginal, String monedaOriginal, String categoria, double tasaDeCambio) {
-    double montoLocal = (montoOriginal / tasaDeCambio); // Conversión base (Ajustable con AppProvider luego)
-    
-    final nuevoGasto = Gasto(
+  void addGasto(String nombre, double montoOriginal, String monedaOriginal, String categoria) {
+    final nuevoGasto = GastoModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       nombre: nombre,
       montoOriginal: montoOriginal,
       monedaOriginal: monedaOriginal,
-      montoLocal: montoLocal,
+      montoLocal: montoOriginal, // Will be adjusted via exchange rates dynamically by UI if needed
       categoria: categoria,
       fecha: DateTime.now(),
     );
@@ -110,24 +98,48 @@ class BudgetProvider with ChangeNotifier {
   }
 
   void _saveGastos() {
-    _storage.budgetBox.put('gastos', _todosLosGastos.map((g) => g.toMap()).toList());
+    _storage.saveData('gastos_v2', _todosLosGastos.map((g) => g.toMap()).toList());
   }
 
-  // --- BÓVEDAS (METAS) ---
   void addBoveda(String nombre, double objetivo) {
-    bovedas.add(Boveda(id: DateTime.now().millisecondsSinceEpoch.toString(), nombre: nombre, objetivo: objetivo));
+    bovedas.add(VaultModel(
+      id: DateTime.now().millisecondsSinceEpoch.toString(), 
+      nombre: nombre, 
+      objetivo: objetivo,
+      ahorrado: 0.0,
+      historial: [],
+    ));
     _saveBovedas();
   }
 
-  void gestionarBoveda(String id, double cantidad, bool esRetiro) {
+  void gestionarBoveda(String id, double monto, bool esRetiro) {
     int idx = bovedas.indexWhere((b) => b.id == id);
     if (idx != -1) {
+      VaultModel boveda = bovedas[idx];
+      double nuevoAhorrado = boveda.ahorrado;
+      
       if (esRetiro) {
-        bovedas[idx].ahorrado -= cantidad;
-        if (bovedas[idx].ahorrado < 0) bovedas[idx].ahorrado = 0;
+        nuevoAhorrado -= monto;
+        if (nuevoAhorrado < 0) nuevoAhorrado = 0;
       } else {
-        bovedas[idx].ahorrado += cantidad;
+        nuevoAhorrado += monto;
       }
+      
+      final transaccion = TransactionRecord(
+        monto: monto,
+        fecha: DateTime.now(),
+        esRetiro: esRetiro,
+      );
+
+      final bovedaActualizada = VaultModel(
+        id: boveda.id,
+        nombre: boveda.nombre,
+        objetivo: boveda.objetivo,
+        ahorrado: nuevoAhorrado,
+        historial: List.from(boveda.historial)..insert(0, transaccion),
+      );
+
+      bovedas[idx] = bovedaActualizada;
       _saveBovedas();
       calcularPresupuesto();
     }
@@ -140,6 +152,6 @@ class BudgetProvider with ChangeNotifier {
   }
 
   void _saveBovedas() {
-    _storage.budgetBox.put('bovedas', bovedas.map((b) => b.toMap()).toList());
+    _storage.saveData('bovedas', bovedas.map((b) => b.toMap()).toList());
   }
 }
